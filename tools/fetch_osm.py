@@ -6,6 +6,9 @@
 Результат: osm_almaty.js рядом с index.html (положи в корень игры).
 
 Нужен только Python 3.8+ и интернет. Сторонних библиотек нет.
+Если Overpass недоступен из Python (например, антивирус перехватывает HTTPS),
+можно сохранить ответы Overpass в папку (city.json, districts.json, pois.json, roads.json)
+и запустить:  python fetch_osm.py --raw ПАПКА
 Данные © OpenStreetMap contributors, лицензия ODbL.
 """
 import json, os, sys, time, urllib.parse, urllib.request
@@ -19,7 +22,16 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "osm_almaty
 UA = "almaty-sboy-game/1.0 (data fetch script)"
 
 
+RAW = sys.argv[sys.argv.index("--raw") + 1] if "--raw" in sys.argv else None
+RAW_NAMES = {"город": "city", "районы": "districts", "точки": "pois", "дороги": "roads"}
+
+
 def overpass(query, label):
+    if RAW:  # готовые ответы Overpass из папки
+        with open(os.path.join(RAW, RAW_NAMES[label] + ".json"), encoding="utf-8") as f:
+            js = json.load(f)
+        print(f"  [{label}] из файла: {len(js.get('elements', []))} объектов")
+        return js
     data = urllib.parse.urlencode({"data": query}).encode()
     last = None
     for attempt in range(2):
@@ -150,7 +162,7 @@ def main():
     js = overpass(f"""[out:json][timeout:240];
 rel({city_id});out geom;
 area({area})->.a;
-rel(area.a)["boundary"="administrative"]["name"~"ский район$"];
+rel(area.a)["boundary"="administrative"]["admin_level"="6"];
 out geom;""", "районы")
     city, districts, seen = [], [], set()
     for el in js["elements"]:
@@ -159,7 +171,7 @@ out geom;""", "районы")
         if el["id"] == city_id:
             city = pack_rings(rings_from_relation(el), 0.0004)
             continue
-        name = el["tags"].get("name", "").replace(" район", "").strip()
+        name = (el["tags"].get("name:ru") or el["tags"].get("name", "")).replace(" район", "").strip()  # name — по-казахски
         if not name or name in seen:
             continue
         seen.add(name)
