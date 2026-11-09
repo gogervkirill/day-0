@@ -20,7 +20,7 @@
 - Зона спокойствия: враги не появляются и не заходят ближе `CALM_R` = 2 клеток от лагеря (`nearCamp`).
 - Сохранение в localStorage, ключ `almaty-sboy-v1`. При загрузке выполняется `Object.assign(newState(), saved)`, поэтому новые поля добавляются в `newState()`.
 - Новые точки (POIS) добавляются **только в конец массива**: индексы используются в `zoneOf` и в заданиях.
-- Хостинг GitHub Pages (нужен HTTPS для GPS и SW). Инструкция в README.md. Пользователь пока ничего не выкладывал.
+- Хостинг GitHub Pages (нужен HTTPS для GPS и SW). Инструкция в README.md. Игра опубликована: https://gogervkirill.github.io/day-0/ (репозиторий gogervkirill/day-0, ветка main, корень). Чтобы обновить сайт, достаточно git push; при изменении файлов игры поднимать версию кэша SHELL в sw.js, иначе у игроков останется старая версия.
 - `tools/fetch_osm.py` выгружает из Overpass районы, POI, дороги и реки в `osm_almaty.js` (`window.OSM`), игра подхватывает файл автоматически. Скрипт проверен только на подставных данных, на реальном Overpass не запускался.
 - Превью-артефакт на claude.ai: https://claude.ai/artifact/VaQtnS2nwsaaSfKeHRPSxs (без GPS и без тайлов).
 
