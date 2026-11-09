@@ -1,5 +1,5 @@
 // Офлайн: оболочка игры — cache-first; тайлы карты — кэшируются по мере просмотра
-const SHELL = "sboy-shell-v8", TILES = "sboy-tiles-v2", MAX_TILES = 3000;
+const SHELL = "sboy-shell-v9", TILES = "sboy-tiles-v2", MAX_TILES = 3000;
 const FILES = ["./", "index.html", "osm_almaty.js", "manifest.webmanifest", "icon.svg"];
 // osm_almaty.js кэшируется при первой загрузке (если он есть)
 self.addEventListener("install", e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES))); self.skipWaiting(); });
