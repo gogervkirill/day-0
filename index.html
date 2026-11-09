@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0d0f0e">
+<title>Алматы: Сбой</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#0d0f0e;--panel:#151917;--panel2:#1d2320;--line:#2c3430;--text:#d9e0d6;--dim:#8a968c;
+  --acc:#d8a330;--good:#5fbf6a;--bad:#e0533f;--ai:#4fb3e8;--gang:#e0533f;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#mapWrap{position:relative;flex:1;min-height:0}
+canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#hud{position:absolute;left:8px;right:8px;top:8px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.bars{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:rgba(13,15,14,.82);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.bar{font-size:11px;color:var(--dim)}
+.bar b{color:var(--text);font-weight:600}
+.bar i{display:block;height:5px;border-radius:3px;background:#2a302d;margin-top:3px;overflow:hidden}
+.bar i s{display:block;height:100%;width:50%;text-decoration:none}
+.cellinfo{align-self:flex-start;background:rgba(13,15,14,.82);border:1px solid var(--line);border-radius:10px;padding:5px 9px;font-size:12px;max-width:100%}
+.cellinfo .t{color:var(--acc);font-weight:600}
+#tools{position:absolute;right:8px;bottom:10px;display:flex;flex-direction:column;gap:8px}
+.fab{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(21,25,23,.92);color:var(--text);font-size:19px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.fab.on{border-color:var(--acc);color:var(--acc)}
+#attrib{position:absolute;left:6px;bottom:4px;font-size:10px;color:#6b766e;pointer-events:none}
+#progress{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(13,15,14,.9);border:1px solid var(--acc);border-radius:12px;padding:10px 14px;min-width:200px;display:none;text-align:center}
+#progress .pb{height:6px;background:#2a302d;border-radius:3px;margin-top:8px;overflow:hidden}
+#progress .pb s{display:block;height:100%;background:var(--acc);width:0;text-decoration:none}
+#progress button{margin-top:8px}
+#sheet{background:var(--panel);border-top:1px solid var(--line);height:40%;max-height:340px;min-height:220px;display:flex;flex-direction:column}
+#tabs{display:flex;border-bottom:1px solid var(--line)}
+#tabs button{flex:1;background:none;border:0;color:var(--dim);padding:10px 4px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent}
+#tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
+#pane{flex:1;overflow:auto;padding:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;text-align:left}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.acc{border-color:var(--acc);color:var(--acc)}
+.btn.bad{border-color:var(--bad);color:var(--bad)}
+.btn small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .n{flex:1}
+.row .n small{display:block;color:var(--dim);font-size:11px}
+.mini{padding:6px 10px;font-size:12px;border-radius:8px}
+.log div{padding:3px 0;border-bottom:1px dashed #252b28;font-size:12.5px}
+.log .tm{color:var(--dim);margin-right:6px;font-variant-numeric:tabular-nums}
+.log .g{color:var(--good)}.log .b{color:var(--bad)}.log .a{color:var(--acc)}
+.dist{margin-bottom:8px}
+.dist .h{display:flex;justify-content:space-between;font-size:13px}
+.dist i{display:block;height:6px;background:#2a302d;border-radius:3px;margin-top:4px;overflow:hidden}
+.dist i s{display:block;height:100%;background:var(--good);text-decoration:none}
+.muted{color:var(--dim);font-size:12px}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;width:100%;max-width:380px}
+#modal h3{margin:0 0 6px;font-size:17px}
+#modal .acts{display:grid;gap:8px;margin-top:12px}
+.hpline{display:flex;gap:10px;font-size:13px;margin:6px 0}
+.clog{max-height:110px;overflow:auto;font-size:12.5px;color:var(--dim);border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+#toast{position:absolute;left:50%;top:92px;transform:translateX(-50%);background:rgba(13,15,14,.92);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:13px;display:none;max-width:90%;text-align:center;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="mapWrap">
+    <canvas id="map"></canvas>
+    <div id="hud">
+      <div class="bars">
+        <div class="bar">❤ <b id="vHp">100</b><i><s id="bHp" style="background:#e0533f"></s></i></div>
+        <div class="bar">🥫 <b id="vFood">100</b><i><s id="bFood" style="background:#d8a330"></s></i></div>
+        <div class="bar">💧 <b id="vWater">100</b><i><s id="bWater" style="background:#4fb3e8"></s></i></div>
+        <div class="bar">⚡ <b id="vEn">100</b><i><s id="bEn" style="background:#5fbf6a"></s></i></div>
+      </div>
+      <div class="cellinfo" id="cellInfo">—</div>
+      <div class="cellinfo" id="eventBar" style="display:none;border-color:var(--bad)"></div>
+    </div>
+    <div id="toast"></div>
+    <div id="progress"><div id="pText">…</div><div class="pb"><s id="pBar"></s></div><button class="btn mini" id="pCancel">Отмена</button></div>
+    <div id="tools">
+      <button class="fab" id="bGps" title="Режим GPS">📡</button>
+      <button class="fab" id="bCenter" title="К игроку">◎</button>
+    </div>
+    <div id="attrib"></div>
+  </div>
+  <div id="sheet">
+    <div id="tabs">
+      <button data-t="act" class="on">Действия</button>
+      <button data-t="inv">Рюкзак</button>
+      <button data-t="dist">Цели</button>
+      <button data-t="log">Журнал</button>
+    </div>
+    <div id="pane"></div>
+  </div>
+</div>
+<div id="modal"><div class="box" id="mbox"></div></div>
+
+<script src="osm_almaty.js"></script>
+<script>
+"use strict";
+/* ================== КОНСТАНТЫ И ГЕО ================== */
+const R = 6378137, LAT0 = 43.25;
+const CELL_REAL = 250;                                   // метров на местности
+const CELL = CELL_REAL / Math.cos(LAT0 * Math.PI / 180); // в метрах Меркатора
+const BOUNDS = {lon0: 76.73, lon1: 77.11, lat0: 43.13, lat1: 43.43};
+const merc = (lon, lat) => [R * lon * Math.PI / 180, R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))];
+const unmerc = (x, y) => [x / R * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI];
+const [OX, OY] = merc(BOUNDS.lon0, BOUNDS.lat0);
+const [EX, EY] = merc(BOUNDS.lon1, BOUNDS.lat1);
+const GW = Math.ceil((EX - OX) / CELL), GH = Math.ceil((EY - OY) / CELL);
+const cellOf = (mx, my) => [Math.floor((mx - OX) / CELL), Math.floor((my - OY) / CELL)];
+const cellCenter = (i, j) => [OX + (i + .5) * CELL, OY + (j + .5) * CELL];
+const key = (i, j) => i + "," + j;
+const cheb = (a, b, c, d) => Math.max(Math.abs(a - c), Math.abs(b - d));
+const inGrid = (i, j) => i >= 0 && j >= 0 && i < GW && j < GH;
+
+function hash(i, j, s) { // детерминированный 0..1
+  let h = (i * 374761393 + j * 668265263 + s * 2147483647) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+/* Граница города (упрощённая, lon/lat) */
+const CITY = [[76.75,43.38],[76.85,43.40],[76.95,43.41],[77.03,43.39],[77.08,43.36],[77.08,43.28],[77.03,43.245],[77.07,43.17],[77.065,43.145],[77.00,43.165],[76.96,43.19],[76.90,43.172],[76.85,43.16],[76.78,43.15],[76.74,43.20],[76.74,43.30]];
+/* Районы: центры-«семена», клетка относится к ближайшему (границы приблизительные) */
+const DISTRICTS = [
+  {n:"Алмалинский",   s:[[76.912,43.252]]},
+  {n:"Медеуский",     s:[[76.975,43.245],[77.02,43.185],[77.035,43.27]]},
+  {n:"Бостандыкский", s:[[76.905,43.205],[76.94,43.195]]},
+  {n:"Ауэзовский",    s:[[76.855,43.225]]},
+  {n:"Жетысуский",    s:[[76.93,43.293]]},
+  {n:"Турксибский",   s:[[76.97,43.34],[77.02,43.37]]},
+  {n:"Алатауский",    s:[[76.82,43.29],[76.78,43.33]]},
+  {n:"Наурызбайский", s:[[76.80,43.19]]},
+];
+/* Улицы и реки для режима без тайлов (приблизительно) */
+const STREETS = [
+  ["пр. Аль-Фараби",[[76.86,43.205],[76.89,43.208],[76.91,43.215],[76.93,43.218],[76.955,43.219],[76.98,43.225]]],
+  ["пр. Абая",[[76.80,43.240],[76.88,43.240],[76.92,43.240],[76.957,43.240]]],
+  ["ул. Сатпаева",[[76.84,43.234],[76.96,43.234]]],
+  ["ул. Толе би",[[76.80,43.252],[76.95,43.252]]],
+  ["ул. Райымбека",[[76.76,43.267],[76.96,43.266]]],
+  ["пр. Рыскулова",[[76.78,43.285],[76.97,43.287]]],
+  ["пр. Суюнбая",[[76.952,43.262],[76.955,43.30],[76.965,43.33]]],
+  ["пр. Достык",[[76.956,43.265],[76.957,43.24],[76.96,43.225],[76.975,43.205],[77.0,43.19],[77.03,43.17],[77.058,43.158]]],
+  ["пр. Назарбаева",[[76.946,43.27],[76.946,43.20]]],
+  ["пр. Сейфуллина",[[76.935,43.30],[76.935,43.21]]],
+  ["ул. Розыбакиева",[[76.895,43.27],[76.895,43.19]]],
+  ["пр. Саина",[[76.858,43.30],[76.858,43.20]]],
+  ["ул. Момышулы",[[76.833,43.31],[76.833,43.22]]],
+  ["ул. Брусиловского",[[76.887,43.215],[76.887,43.280]]],
+  ["ул. Тлендиева",[[76.875,43.236],[76.875,43.272]]],
+  ["ул. Туркебаева",[[76.881,43.240],[76.881,43.270]]],
+  ["ВОАД",[[77.01,43.36],[77.012,43.28],[77.005,43.23]]],
+  ["Кульджинский тракт",[[76.97,43.27],[77.03,43.276],[77.09,43.28]]],
+];
+const RIVERS = [
+  [[76.88,43.17],[76.885,43.22],[76.89,43.26],[76.88,43.32],[76.87,43.40]],
+  [[77.05,43.16],[77.0,43.19],[76.975,43.215],[76.965,43.24],[76.97,43.27],[76.98,43.31],[76.99,43.38]],
+];
+/* Ключевые точки (координаты приблизительные). f: фракция зоны */
+const POIS = [
+  {n:"Площадь Республики",t:"landmark",ll:[76.9455,43.2380]},
+  {n:"Зелёный базар",t:"market",ll:[76.9528,43.2627],f:"gang",boss:"Хозяин базара"},
+  {n:"Барахолка",t:"market",ll:[76.8380,43.2680],f:"gang",boss:"Барон Барахолки"},
+  {n:"ТРЦ Mega",t:"mall",ll:[76.8920,43.2018]},
+  {n:"Dostyk Plaza",t:"mall",ll:[76.9568,43.2332]},
+  {n:"Esentai Mall",t:"mall",ll:[76.9283,43.2183]},
+  {n:"ТРЦ Москва",t:"mall",ll:[76.8640,43.2297]},
+  {n:"Телебашня Кок-Тобе",t:"tower",ll:[76.9770,43.2290],f:"ai"},
+  {n:"ТЭЦ-1",t:"power",ll:[76.8990,43.2582],f:"ai"},
+  {n:"ТЭЦ-2",t:"power",ll:[76.7650,43.3000],f:"ai"},
+  {n:"Аэропорт",t:"tower",ll:[77.0300,43.3500],f:"ai"},
+  {n:"Вокзал Алматы-1",t:"station",ll:[76.9495,43.3405]},
+  {n:"Вокзал Алматы-2",t:"station",ll:[76.9405,43.2715]},
+  {n:"Медеу",t:"landmark",ll:[77.0585,43.1575]},
+  {n:"Центральный стадион",t:"landmark",ll:[76.9200,43.2370]},
+  {n:"Парк 28 панфиловцев",t:"park",ll:[76.9560,43.2590]},
+  {n:"Центральный парк",t:"park",ll:[76.9700,43.2610]},
+  {n:"Ботанический сад",t:"park",ll:[76.9150,43.2210]},
+  {n:"Озеро Сайран",t:"park",ll:[76.8710,43.2390]},
+  {n:"Городская больница",t:"hospital",ll:[76.8790,43.2470]},
+  {n:"Больница скорой помощи",t:"hospital",ll:[76.9300,43.2560]},
+  {n:"Отдел полиции",t:"police",ll:[76.9445,43.2575]},
+  {n:"Отдел полиции",t:"police",ll:[76.8600,43.2150]},
+  {n:"Военный склад",t:"military",ll:[76.9800,43.3300],f:"ai"},
+  {n:"Атакент",t:"mall",ll:[76.9080,43.2265]},
+  {n:"Логово «Шакалов»",t:"hideout",ll:[76.805,43.285],f:"gang"},
+  {n:"Логово «Ржавых»",t:"hideout",ll:[76.795,43.232],f:"gang"},
+  {n:"Логово «Степных»",t:"hideout",ll:[76.875,43.300],f:"gang"},
+  {n:"Логово «Сорок»",t:"hideout",ll:[76.995,43.335],f:"gang"},
+  {n:"Логово «Горных»",t:"hideout",ll:[76.850,43.185],f:"gang"},
+  /* --- мкр Тастак-2 (координаты приблизительные) --- */
+  {n:"Рынок «Тастак»",t:"market",ll:[76.8855,43.2515],f:"gang",boss:"Смотрящий Тастака",r:2,id:"t2market"},
+  {n:"Школа — лагерь выживших",t:"camp",ll:[76.8800,43.2590],id:"t2camp"},
+  {n:"Метро «Сайран»",t:"metro",ll:[76.8810,43.2405],id:"m_sairan",link:"m_moskva"},
+  {n:"Метро «Москва»",t:"metro",ll:[76.8520,43.2405],id:"m_moskva",link:"m_sairan"},
+  {n:"Автовокзал «Сайран»",t:"station",ll:[76.8755,43.2525]},
+  {n:"Высотка на Брусиловского",t:"highrise",ll:[76.8865,43.2425]},
+];
+const POI_ICON = {landmark:"🏛",market:"🏪",mall:"🏬",tower:"📡",power:"🏭",station:"🚉",park:"🌳",hospital:"🏥",police:"🚓",military:"🎖",hideout:"☠",camp:"🏫",metro:"Ⓜ",highrise:"🏢"};
+const POI_BY = id => POIS.find(p => p.id === id);
+const isLake = p => p && p.n === "Озеро Сайран";
+const CELL_TYPES = [ // процедурные клетки
+  {t:"res",n:"Жилой квартал",p:.52},{t:"shop",n:"Магазин",p:.15},{t:"pharm",n:"Аптека",p:.07},
+  {t:"garage",n:"Гаражи",p:.11},{t:"office",n:"Офисы",p:.09},{t:"empty",n:"Пустырь",p:.06}];
+
+/* ================== ДАННЫЕ OSM (если есть osm_almaty.js) ================== */
+const OSM = window.OSM && window.OSM.v === 1 ? window.OSM : null;
+let CITY_RINGS = [CITY];
+const CELL_TYPES_OSM = [{t:"res",n:"Жилой квартал",p:.74},{t:"office",n:"Офисы",p:.14},{t:"empty",n:"Пустырь",p:.12}];
+if (OSM) {
+  if (OSM.city && OSM.city.length) CITY_RINGS = OSM.city;
+  if (OSM.districts && OSM.districts.length >= 4) {
+    const ring0 = r => { let x = 0, y = 0; r.forEach(p => { x += p[0]; y += p[1]; }); return [x / r.length, y / r.length]; };
+    const list = [], rest = [...OSM.districts];
+    DISTRICTS.forEach(d => { const k = rest.findIndex(o => o.n.startsWith(d.n.slice(0, 5))); if (k >= 0) list.push(rest.splice(k, 1)[0]); });
+    list.push(...rest);
+    DISTRICTS.length = 0;
+    list.forEach(o => DISTRICTS.push({n: o.n, r: o.r, s: [ring0(o.r.reduce((a, b) => b.length > a.length ? b : a))]}));
+  }
+  if (OSM.roads && OSM.roads.length) { STREETS.length = 0; OSM.roads.forEach(([n, rank, line]) => STREETS.push([n, line, rank])); }
+  if (OSM.rivers && OSM.rivers.length) { RIVERS.length = 0; OSM.rivers.forEach(l => RIVERS.push(l)); }
+}
+
+/* ================== МИКРОРАЙОНЫ ================== */
+const MICRO = [
+  {id:"t2", n:"Тастак-2", bbox:[76.8745,43.2400,76.8875,43.2665], // Тлендиева–Брусиловского, Абая–Райымбека
+   types:[{t:"res",n:"Панельки",p:.5},{t:"private",n:"Частный сектор",p:.32},{t:"shop",n:"Магазинчик",p:.1},{t:"garage",n:"Гаражи",p:.08}]},
+];
+/* ================== ПРЕДРАСЧЁТ СЕТКИ ================== */
+const N = GW * GH;
+const inCity = new Uint8Array(N), distOf = new Int8Array(N).fill(-1), zoneOf = new Int16Array(N).fill(-1);
+const poiAt = new Map();
+const microOf = new Int8Array(GW * GH).fill(-1);
+const ringsM = rings => rings.map(r => r.map(p => merc(p[0], p[1])));
+const CITY_RM = ringsM(CITY_RINGS);
+const osmCell = new Map();
+/* Скан-лайн: вызывает cb(idx) для клеток, центр которых внутри колец (чётно-нечётно) */
+function rasterRings(rm, cb) {
+  let y0 = Infinity, y1 = -Infinity;
+  rm.forEach(r => r.forEach(([, y]) => { if (y < y0) y0 = y; if (y > y1) y1 = y; }));
+  const ja = Math.max(0, Math.floor((y0 - OY) / CELL)), jb = Math.min(GH - 1, Math.ceil((y1 - OY) / CELL));
+  for (let j = ja; j <= jb; j++) {
+    const y = OY + (j + .5) * CELL, xs = [];
+    for (const r of rm) for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+      const [xi, yi] = r[a], [xj, yj] = r[b];
+      if ((yi > y) !== (yj > y)) xs.push(xi + (y - yi) * (xj - xi) / (yj - yi));
+    }
+    xs.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const ia = Math.max(0, Math.ceil((xs[k] - OX) / CELL - .5)), ib = Math.min(GW - 1, Math.floor((xs[k + 1] - OX) / CELL - .5));
+      for (let i = ia; i <= ib; i++) cb(j * GW + i);
+    }
+  }
+}
+function pip(x, y, poly) {
+  let c = false;
+  for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+    const [xi, yi] = poly[a], [xj, yj] = poly[b];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+(function precompute() {
+  const seeds = [];
+  DISTRICTS.forEach((d, k) => d.s.forEach(s => seeds.push([merc(s[0], s[1]), k])));
+  rasterRings(CITY_RM, idx => inCity[idx] = 1);
+  DISTRICTS.forEach((d, k) => { if (d.r) rasterRings(ringsM(d.r), idx => { inCity[idx] = 1; distOf[idx] = k; }); });
+  for (let idx = 0; idx < N; idx++) {
+    if (!inCity[idx] || distOf[idx] >= 0) continue;
+    const [x, y] = cellCenter(idx % GW, Math.floor(idx / GW));
+    let best = 1e18, bk = 0;
+    for (const [[sx, sy], k] of seeds) { const d = (x - sx) ** 2 + (y - sy) ** 2; if (d < best) { best = d; bk = k; } }
+    distOf[idx] = bk;
+  }
+  if (OSM && OSM.pois) {
+    const PRI = {hospital:9,police:8,military:8,mall:7,market:7,power:6,tower:6,pharm:5,station:5,garage:4,shop:3,park:2};
+    for (const [lon, lat, t, n] of OSM.pois) {
+      const [i, j] = cellOf(...merc(lon, lat)); if (!inGrid(i, j) || !inCity[j * GW + i]) continue;
+      const k = key(i, j), cur = osmCell.get(k);
+      if (!cur || (PRI[t] || 0) > (PRI[cur.t] || 0)) osmCell.set(k, {t, n, cnt: (cur ? cur.cnt : 0) + 1}); else cur.cnt++;
+    }
+  }
+  POIS.forEach((p, k) => {
+    const [x, y] = merc(p.ll[0], p.ll[1]); const [i, j] = cellOf(x, y);
+    p.i = i; p.j = j; p.mx = x; p.my = y; poiAt.set(key(i, j), k);
+    if (p.f) {
+      const r = p.r || (p.t === "hideout" ? 2 : 3);
+      for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+        const a = i + di, b = j + dj; if (inGrid(a, b) && inCity[b * GW + a]) zoneOf[b * GW + a] = k;
+      }
+    }
+  });
+  MICRO.forEach((m, k) => { const [a, b] = cellOf(...merc(m.bbox[0], m.bbox[1])), [c, d] = cellOf(...merc(m.bbox[2], m.bbox[3])); m.total = 0;
+    for (let j = b; j <= d; j++) for (let i = a; i <= c; i++) if (inGrid(i, j) && inCity[j * GW + i]) { microOf[j * GW + i] = k; m.total++; }
+    m.ci = Math.round((a + c) / 2); m.tj = d; });
+  DISTRICTS.forEach((d, k) => { d.total = 0; });
+  for (let idx = 0; idx < N; idx++) if (distOf[idx] >= 0) DISTRICTS[distOf[idx]].total++;
+})();
+
+function cellBase(i, j) {
+  const k = key(i, j);
+  if (poiAt.has(k)) { const p = POIS[poiAt.get(k)]; return {t: p.t, n: p.n, poi: p}; }
+  const o = osmCell.get(k); if (o) return {t: o.t, n: o.n + (o.cnt > 1 ? " +" + (o.cnt - 1) : ""), osm: true};
+  const r = hash(i, j, 1); let acc = 0;
+  const mi = microOf[j * GW + i];
+  if (mi >= 0) { for (const c of MICRO[mi].types) { acc += c.p; if (r < acc) return {t: c.t, n: c.n}; } acc = 0; }
+  for (const c of (OSM && OSM.pois ? CELL_TYPES_OSM : CELL_TYPES)) { acc += c.p; if (r < acc) return {t: c.t, n: c.n}; }
+  return CELL_TYPES[0];
+}
+const safeCell = (i, j) => { const k = poiAt.get(key(i, j)); return k !== undefined && (POIS[k].t === "camp" || POIS[k].t === "metro"); };
+// Зона спокойствия вокруг лагерей: враги не появляются и не заходят ближе CALM_R клеток
+const CALM_R = 2;
+const nearCamp = (i, j, r = CALM_R) => POIS.some(p => p.t === "camp" && Math.max(Math.abs(p.i - i), Math.abs(p.j - j)) <= r);
+const baseTrap = (i, j) => !safeCell(i, j) && hash(i, j, 7) < (zoneOf[j * GW + i] >= 0 ? .14 : .06);
+const zoneFaction = (i, j) => { const z = zoneOf[j * GW + i]; return z >= 0 ? POIS[z].f : null; };
+
+/* ================== ПРЕДМЕТЫ ================== */
+const ITEMS = {
+  can:   {n:"Консервы",  w:.5, use:{food:35}},
+  rusk:  {n:"Сухари",    w:.2, use:{food:15}},
+  water: {n:"Вода",      w:.5, use:{water:40}},
+  band:  {n:"Бинт",      w:.1, use:{hp:15}},
+  medkit:{n:"Аптечка",   w:.6, use:{hp:45}},
+  rebar: {n:"Арматура",  w:1.5, dmg:10},
+  bat:   {n:"Бита",      w:1.2, dmg:13},
+  axe:   {n:"Топор",     w:2,  dmg:17},
+  pistol:{n:"Пистолет",  w:1,  dmg:28, ammo:"ammo"},
+  ammo:  {n:"Патроны",   w:.03},
+  emp:   {n:"ЭМИ-граната",w:.4},
+  parts: {n:"Детали",    w:.3},
+  batt:  {n:"Батарейки", w:.1},
+  vest:  {n:"Бронежилет",w:4,  armor:.35},
+  fuel:  {n:"Бензин",    w:1},
+  molotov:{n:"Молотов",  w:.6},
+  trap:  {n:"Растяжка",  w:.5},
+  bike:  {n:"Велосипед", w:0},
+  akb:   {n:"Аккумулятор",w:3},
+  mask:  {n:"Противогаз",w:1},
+  veg:   {n:"Овощи",     w:.3, use:{food:20}},
+  cable: {n:"Медный кабель", w:.5}, tires: {n:"Старые шины", w:2}, boards: {n:"Платы", w:.2},
+  coins: {n:"Монеты тенге", w:.05}, watch: {n:"Часы «Луч»", w:.1}, ring: {n:"Золотое кольцо", w:.02},
+};
+const VAL = {can:4,rusk:2,water:4,band:3,medkit:12,rebar:4,bat:6,axe:10,pistol:40,ammo:1,emp:18,parts:2,batt:2,vest:35,fuel:5,molotov:6,trap:5,bike:45,akb:25,mask:20,veg:3,cable:5,tires:3,boards:6,coins:4,watch:15,ring:60};
+const ITEM_INFO = {emp:"мгновенно отключает машину ИИ", parts:"укрепления, крафт", batt:"крафт", fuel:"крафт: Молотов",
+  molotov:"в бою против банд: 40 урона", trap:"ставится на своей клетке", bike:"+1 радиус, ходьба вдвое быстрее", akb:"для ремонта машины в гаражах", mask:"защищает от токсичных выбросов", ammo:"для пистолета", vest:"−35% урона", cable:"лом: продать или переработать", tires:"лом: продать или переработать", boards:"лом: продать или переработать", coins:"ценность: продать", watch:"ценность: продать", ring:"редкость: продать дорого"};
+const RECIPES = [
+  {id:"medkit", out:["medkit",1], need:{band:3}},
+  {id:"molotov",out:["molotov",2],need:{fuel:1, parts:1}},
+  {id:"trap",   out:["trap",1],   need:{parts:3}},
+  {id:"ammo",   out:["ammo",6],   need:{parts:3}},
+  {id:"emp",    out:["emp",1],    need:{parts:4, batt:2}},
+  {id:"vest",   out:["vest",1],   need:{parts:10, batt:2}},
+];
+/* Доход с клеток: тип клетки → что производит каждые YIELD_MS */
+const INCOME = {res:["rusk","water"],shop:["can","water"],pharm:["band"],garage:["parts","fuel"],office:["batt"],
+  market:["can","ammo","water"],mall:["batt","can"],hospital:["medkit","band"],police:["ammo"],military:["ammo","parts"],
+  tower:["parts","batt"],power:["parts","batt"],station:["can","fuel"],park:["water"],landmark:["water","can"],hideout:["ammo","can"],private:["can","rusk"],highrise:["batt"],metro:["batt","water"]};
+const YIELD_MS = 10 * 60e3, YIELD_CAP = 6;
+/* Перки */
+const PERKS = {
+  fast:   {n:"Скороход",    d:"+1 клетка к радиусу перехода", max:2},
+  stam:   {n:"Выносливость",d:"+25% восстановление энергии",  max:3},
+  loot:   {n:"Мародёр",     d:"+20% шанс лишней находки",     max:3},
+  fight:  {n:"Боец",        d:"+15% урона",                   max:3},
+  tough:  {n:"Живучесть",   d:"−10% получаемого урона",       max:3},
+  stealth:{n:"Тихий шаг",   d:"−30% шанс ловушек и засад",    max:2},
+  carry:  {n:"Носильщик",   d:"+8 кг грузоподъёмности",       max:2},
+  meta:   {n:"Метаболизм",  d:"−15% расход еды и воды",       max:3},
+};
+const LOOT = { // [предмет, вес шанса, мин, макс]
+  res:     [["bike",.15,1,1],["can",4,1,2],["water",4,1,2],["rusk",3,1,2],["band",2,1,2],["parts",2,1,2],["bat",.4,1,1]],
+  shop:    [["can",5,1,3],["water",5,1,3],["rusk",4,1,3],["batt",2,1,2]],
+  pharm:   [["band",5,1,3],["medkit",3,1,1],["water",1,1,1]],
+  garage:  [["parts",5,1,3],["rebar",1.5,1,1],["axe",.8,1,1],["batt",2,1,2],["fuel",1.5,1,1],["akb",.5,1,1],["bike",.25,1,1]],
+  office:  [["batt",3,1,3],["parts",3,1,2],["water",2,1,1]],
+  empty:   [["parts",2,1,1],["rusk",1,1,1]],
+  market:  [["can",4,2,4],["water",4,2,4],["medkit",1.5,1,1],["ammo",2,4,10],["pistol",.4,1,1],["parts",2,1,3]],
+  mall:    [["can",3,1,3],["water",3,1,3],["batt",3,1,3],["vest",.3,1,1],["band",2,1,2]],
+  hospital:[["medkit",5,1,2],["band",4,2,4],["mask",1,1,1]],
+  police:  [["ammo",5,5,12],["pistol",1.2,1,1],["vest",.8,1,1],["band",1,1,2]],
+  military:[["mask",1.5,1,1],["ammo",5,6,15],["emp",2,1,1],["vest",1,1,1],["parts",2,1,3]],
+  tower:   [["parts",4,2,4],["batt",4,2,4],["emp",1,1,1]],
+  power:   [["mask",1,1,1],["akb",1,1,1],["parts",5,2,5],["batt",3,2,4],["emp",.8,1,1]],
+  station: [["can",3,1,2],["water",3,1,2],["parts",3,1,2],["fuel",1.5,1,1]],
+  park:    [["water",3,1,2],["rusk",2,1,1]],
+  landmark:[["water",2,1,2],["can",2,1,2],["parts",2,1,2]],
+  private: [["can",3,1,2],["rusk",3,1,2],["water",2,1,2],["parts",3,1,2],["fuel",1,1,1],["bike",.3,1,1],["axe",.5,1,1]],
+  highrise:[["water",3,1,2],["can",2,1,2],["batt",3,1,2],["band",2,1,2]],
+  metro:   [["water",2,1,2],["batt",3,1,3],["parts",2,1,2]],
+  camp:    [["water",1,1,1]],
+  hideout: [["ammo",4,4,10],["can",3,1,3],["pistol",.6,1,1],["medkit",1,1,1]],
+};
+const ENEMY = {
+  bandit:{n:"Мародёр",i:"🔪",hp:30,d:[5,9],f:"gang",step:3200,loot:[["can",1],["ammo",3],["water",1]]},
+  thug:  {n:"Бандит",i:"💀",hp:48,d:[8,13],f:"gang",step:3600,loot:[["ammo",5],["band",1],["can",1]]},
+  boss:  {n:"Главарь",i:"👑",hp:110,d:[12,18],f:"gang",step:0,loot:[["pistol",1],["ammo",12],["medkit",1]]},
+  drone: {n:"Дрон-патруль",i:"🛸",hp:26,d:[7,11],f:"ai",step:2200,loot:[["batt",2],["parts",1]]},
+  turret:{n:"Турель",i:"🗼",hp:70,d:[11,17],f:"ai",step:0,loot:[["parts",3],["batt",2]]},
+};
+
+/* ================== СОСТОЯНИЕ ================== */
+const SAVE_KEY = "almaty-sboy-v1";
+const START = POI_BY("t2camp");
+function newState() {
+  return {
+    t: Date.now(), p: {i: START.i, j: START.j, hp: 100, food: 85, water: 85, en: 100},
+    inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
+    cells: {}, log: [], kills: 0, deaths: 0, gps: false,
+    xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, mkt: {}, scan: null, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {},
+  };
+}
+let S = (() => { const l = load(); return l ? Object.assign(newState(), l) : newState(); })();
+const pk = k => S.perks[k] || 0;
+const carOn = () => S.vehicle === "car" && S.tank >= .5;
+const moveR = () => 2 + pk("fast") + (S.vehicle === "bike" ? 1 : carOn() ? 3 : 0);
+const maxW = () => 25 + 8 * pk("carry");
+const xpNext = () => 40 + S.lvl * 30;
+function gainXp(n) {
+  S.xp += n;
+  while (S.xp >= xpNext()) { S.xp -= xpNext(); S.lvl++; S.pendingPerks++; log("★ Уровень " + S.lvl + "! Выберите навык", "g"); toast("Новый уровень: " + S.lvl); }
+}
+const C = k => S.cells[k] || (S.cells[k] = {});
+let ents = [];          // враги рядом (не сохраняются)
+let entId = 1;
+let busy = null;        // текущее действие с таймером
+let fight = null;       // текущий бой
+let travel = null;      // перемещение
+let resting = false;
+let tab = "act";
+
+function load() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+function save() { S.t = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+
+function log(msg, cls) {
+  const d = new Date(); const tm = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  S.log.unshift([tm, msg, cls || ""]); if (S.log.length > 80) S.log.length = 80;
+  if (tab === "log") renderPane();
+}
+function toast(msg) {
+  const t = document.getElementById("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 2600);
+}
+
+/* ================== КАРТА: РЕНДЕР ================== */
+const cv = document.getElementById("map"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+const cam = {x: 0, y: 0, s: 0.05}; // s = пикселей на метр Меркатора
+const MIN_S = 0.006, MAX_S = 4;  // 4 ≈ уровень z19+ (видны отдельные дома)
+let dirty = true;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  const r = cv.getBoundingClientRect(); W = r.width; H = r.height;
+  cv.width = W * DPR; cv.height = H * DPR; dirty = true;
+}
+const toScr = (x, y) => [W / 2 + (x - cam.x) * cam.s, H / 2 - (y - cam.y) * cam.s];
+const toMerc = (sx, sy) => [cam.x + (sx - W / 2) / cam.s, cam.y - (sy - H / 2) / cam.s];
+function centerOnPlayer() { const [x, y] = cellCenter(S.p.i, S.p.j); cam.x = x; cam.y = y; dirty = true; }
+
+/* Тайлы OpenStreetMap, затемнённые фильтром под стиль игры (без сети — фолбэк на векторы).
+   Политика OSM: только лёгкое использование; для релиза — свой PMTiles/тайл-сервер. */
+const TILE_FILTER = "invert(1) hue-rotate(180deg) brightness(.75) contrast(.9) saturate(.5)";
+const tiles = new Map(); let tileOk = 0, tileFail = 0;
+const tilesUsable = () => tileOk > 0 || tileFail < 6;
+// Уже загруженный тайл-предок (для подмены, пока грузится нужный): без запуска загрузки
+function loadedParent(z, x, y) {
+  for (let d = 1; d <= 5 && z - d >= 0; d++) {
+    const t = tiles.get((z - d) + "/" + (x >> d) + "/" + (y >> d));
+    if (t && t.ok) return {t, d};
+  }
+  return null;
+}
+function getTile(z, x, y) {
+  const k = z + "/" + x + "/" + y; let t = tiles.get(k);
+  if (t) { tiles.delete(k); tiles.set(k, t); return t; }  // LRU: свежие в конец
+  const img = new Image(); t = {img, ok: false}; tiles.set(k, t);
+  img.onload = () => { t.ok = true; tileOk++; dirty = true; };
+  img.onerror = () => { tileFail++; dirty = true; };
+  img.src = "https://tile.openstreetmap.org/" + k + ".png";
+  if (tiles.size > 600) { const first = tiles.keys().next().value; tiles.delete(first); }
+  return t;
+}
+function drawTiles() {
+  const WORLD = 2 * Math.PI * R;
+  let z = Math.round(Math.log2(cam.s * WORLD / 256)); z = Math.max(10, Math.min(19, z));
+  const n = 2 ** z, tsz = WORLD / n * cam.s;
+  const [x0, y0] = toMerc(0, 0), [x1, y1] = toMerc(W, H);
+  const tx0 = Math.floor((x0 + WORLD / 2) / WORLD * n), tx1 = Math.floor((x1 + WORLD / 2) / WORLD * n);
+  const ty0 = Math.floor((WORLD / 2 - y0) / WORLD * n), ty1 = Math.floor((WORLD / 2 - y1) / WORLD * n);
+  if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 80) return;
+  ctx.save(); const hasFilter = "filter" in ctx; if (hasFilter) ctx.filter = TILE_FILTER;
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+    const t = getTile(z, tx, ty);
+    const mx = tx / n * WORLD - WORLD / 2, my = WORLD / 2 - ty / n * WORLD;
+    const [sx, sy] = toScr(mx, my);
+    if (t.ok) { ctx.drawImage(t.img, sx, sy, tsz + .5, tsz + .5); continue; }
+    const pr = loadedParent(z, tx, ty); if (!pr) continue;   // пока грузится — растянутый тайл уровнем выше
+    const part = 256 >> pr.d, px = (tx & ((1 << pr.d) - 1)) * part, py = (ty & ((1 << pr.d) - 1)) * part;
+    ctx.drawImage(pr.t.img, px, py, part, part, sx, sy, tsz + .5, tsz + .5);
+  }
+  ctx.restore();
+  if (!hasFilter && tileOk) { ctx.fillStyle = "rgba(10,14,12,.6)"; ctx.fillRect(0, 0, W, H); }  // старые браузеры без canvas filter
+}
+const STREETS_M = STREETS.map(([n, pts, rank]) => [n, pts.map(p => merc(p[0], p[1])), rank === undefined ? 1 : rank]);
+const RIVERS_M = RIVERS.map(pts => pts.map(p => merc(p[0], p[1])));
+function poly(pts) { ctx.beginPath(); pts.forEach(([x, y], k) => { const [sx, sy] = toScr(x, y); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }); }
+function drawVectors() {
+  ctx.fillStyle = "#141a17"; ctx.beginPath();
+  CITY_RM.forEach(r => r.forEach(([x, y], k) => { const [sx, sy] = toScr(x, y); k ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }));
+  ctx.fill("evenodd");
+  ctx.strokeStyle = "#1f4a5c"; ctx.lineWidth = Math.max(1.5, 30 * cam.s); ctx.lineCap = "round"; ctx.lineJoin = "round";
+  RIVERS_M.forEach(r => { poly(r); ctx.stroke(); });
+  ctx.strokeStyle = "#39413c";
+  STREETS_M.forEach(([, p, rank]) => { ctx.lineWidth = Math.max(rank < 2 ? 1.2 : .8, (rank < 1 ? 45 : rank < 2 ? 35 : 22) * cam.s); poly(p); ctx.stroke(); });
+  if (cam.s > 0.06) {
+    ctx.fillStyle = "#6f7a72"; ctx.font = "11px system-ui"; ctx.textAlign = "center"; const done = new Set();
+    STREETS_M.forEach(([n, p, rank]) => { if (!n || rank > 1 || done.has(n)) return;
+      const m = p[Math.floor((p.length - 1) / 2)], m2 = p[Math.ceil((p.length - 1) / 2)];
+      const [sx, sy] = toScr((m[0] + m2[0]) / 2, (m[1] + m2[1]) / 2); if (sx < 0 || sy < 0 || sx > W || sy > H) return;
+      done.add(n); ctx.fillText(n, sx, sy - 4); });
+  }
+}
+function draw() {
+  dirty = false;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = "#0b0d0c"; ctx.fillRect(0, 0, W, H);
+  const useTiles = tilesUsable();
+  if (useTiles) drawTiles();
+  if (!useTiles || tileOk === 0) drawVectors();
+  document.getElementById("attrib").textContent = tileOk ? "© OpenStreetMap contributors" : OSM ? "Данные © OpenStreetMap contributors" : "Схема приблизительная · сеть карт недоступна";
+
+  const [x0, y0] = toMerc(0, H), [x1, y1] = toMerc(W, 0);
+  const [i0, j0] = cellOf(x0, y0), [i1, j1] = cellOf(x1, y1);
+  const cs = CELL * cam.s;
+  const now = Date.now();
+  for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
+    const idx = j * GW + i; if (!inCity[idx]) continue;
+    const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
+    const c = S.cells[key(i, j)];
+    if (!c || !c.e) { ctx.fillStyle = "rgba(8,10,9,0.62)"; ctx.fillRect(sx, sy, cs + .6, cs + .6); continue; }
+    const zf = zoneOf[idx] >= 0 && !(c.o) ? POIS[zoneOf[idx]].f : null;
+    if (c.o) { ctx.fillStyle = c.f ? "rgba(95,191,106,0.38)" : "rgba(95,191,106,0.30)"; ctx.fillRect(sx, sy, cs, cs); }
+    else if (zf) { ctx.fillStyle = zf === "ai" ? "rgba(79,179,232,0.16)" : "rgba(224,83,63,0.16)"; ctx.fillRect(sx, sy, cs, cs); }
+    if (c.ls && c.lc >= 3 && now - c.ls < RESPAWN) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(sx, sy, cs, cs); }
+    if (cs > 14 && c.s && baseTrap(i, j) && !c.td) { ctx.font = Math.min(18, cs * .5) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#e8a23a"; ctx.fillText("⚠", sx + cs * .8, sy + cs * .22); }
+  }
+  // сетка
+  if (cs > 9) {
+    ctx.strokeStyle = "rgba(216,163,48,0.10)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (let i = Math.max(0, i0); i <= Math.min(GW, i1 + 1); i++) { const [sx] = toScr(OX + i * CELL, 0); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); }
+    for (let j = Math.max(0, j0); j <= Math.min(GH, j1 + 1); j++) { const [, sy] = toScr(0, OY + j * CELL); ctx.moveTo(0, sy); ctx.lineTo(W, sy); }
+    ctx.stroke();
+  }
+  // границы районов (видимые клетки)
+  if (cs > 5) {
+    ctx.strokeStyle = "rgba(216,163,48,0.45)"; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
+      const d = distOf[j * GW + i]; if (d < 0) continue;
+      const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
+      if (i + 1 < GW && distOf[j * GW + i + 1] !== d) { ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); }
+      if (j > 0 && distOf[(j - 1) * GW + i] !== d) { ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); }
+    }
+    ctx.stroke();
+  }
+  // радиус перемещения
+  if (!S.gps) {
+    const r = moveR();
+    const [sx, sy] = toScr(OX + (S.p.i - r) * CELL, OY + (S.p.j + r + 1) * CELL);
+    ctx.strokeStyle = "rgba(216,163,48,0.85)"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
+    ctx.strokeRect(sx, sy, cs * (2 * r + 1), cs * (2 * r + 1)); ctx.setLineDash([]);
+  }
+  // точки интереса (только открытые)
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  POIS.forEach(p => {
+    const c = S.cells[key(p.i, p.j)]; if (!c || !c.e) return;
+    const [sx, sy] = toScr(...cellCenter(p.i, p.j));
+    if (sx < -60 || sy < -30 || sx > W + 60 || sy > H + 30) return;
+    ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText(POI_ICON[p.t] || "•", sx, sy);
+    if (cs > 18) { ctx.font = "600 11px system-ui"; ctx.fillStyle = "#000"; ctx.fillText(p.n, sx + 1, sy + cs * .5 + 5); ctx.fillStyle = "#e8d9b0"; ctx.fillText(p.n, sx, sy + cs * .5 + 4); }
+  });
+  if (S.base) { const [bi, bj] = S.base.split(",").map(Number); const [sx, sy] = toScr(...cellCenter(bi, bj));
+    ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText("🏠", sx - cs * .25, sy - cs * .25); }
+  // тепловая карта сканера
+  if (S.scan && now < S.scan.until) { const sc = S.scan;
+    for (let dj = -sc.r; dj <= sc.r; dj++) for (let di = -sc.r; di <= sc.r; di++) { const a = sc.i + di, b = sc.j + dj; if (!inGrid(a, b) || !inCity[b * GW + a]) continue;
+      const q = depoQ(a, b, sc.d), [sx, sy] = toScr(OX + a * CELL, OY + (b + 1) * CELL);
+      ctx.fillStyle = q >= .7 ? "rgba(95,191,106,.42)" : q >= .4 ? "rgba(216,163,48,.32)" : "rgba(224,83,63,.22)"; ctx.fillRect(sx + 1, sy + 1, cs - 2, cs - 2);
+      if (cs > 34) { ctx.font = "700 " + Math.min(16, cs * .2) + "px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(pct(q), sx + cs * .8, sy + cs * .14); } }
+    const [hx, hy] = toScr(...cellCenter(sc.i, sc.j)); ctx.font = "600 12px system-ui"; ctx.fillStyle = "#e8d9b0"; ctx.fillText("📡 " + DEPO[sc.d].n + " · " + Math.ceil((sc.until - now) / 60e3) + " мин", hx, hy - cs * (sc.r + .7)); }
+  // штаб: зона ускорения; цепочки: линии от поставщиков к цехам
+  { const hk = hqCell(); if (hk && cs > 3) { const [hi, hj] = kij(hk); const [sx, sy] = toScr(OX + (hi - HQ_R) * CELL, OY + (hj + HQ_R + 1) * CELL);
+      ctx.fillStyle = "rgba(216,163,48,0.06)"; ctx.fillRect(sx, sy, cs * (2 * HQ_R + 1), cs * (2 * HQ_R + 1));
+      ctx.strokeStyle = "rgba(216,163,48,0.5)"; ctx.setLineDash([2, 6]); ctx.lineWidth = 2; ctx.strokeRect(sx, sy, cs * (2 * HQ_R + 1), cs * (2 * HQ_R + 1)); ctx.setLineDash([]); } }
+  if (cs > 10) { ctx.lineWidth = Math.max(2, cs * .03); ctx.strokeStyle = "rgba(216,163,48,0.7)"; ctx.setLineDash([cs * .06, cs * .05]);
+    for (const k in S.cells) { const c = S.cells[k]; if (!c.b || BUILD[c.b.t].g !== "proc") continue;
+      const [ci, cj] = kij(k); const [ax, ay] = toScr(...cellCenter(ci, cj));
+      for (const it of Object.keys(BUILD[c.b.t].in)) for (const sk of suppliers(k, it)) { const [si, sj] = kij(sk); const [bx, by] = toScr(...cellCenter(si, sj));
+        ctx.beginPath(); ctx.moveTo(bx - cs * .28, by + cs * .26); ctx.lineTo(ax - cs * .28, ay + cs * .26); ctx.stroke(); } }
+    ctx.setLineDash([]); }
+  // постройки
+  if (cs > 10) for (const k in S.cells) { const c = S.cells[k]; if (!c.b) continue;
+    const [bi, bj] = k.split(",").map(Number); const [sx, sy] = toScr(...cellCenter(bi, bj));
+    if (sx < -cs || sy < -cs || sx > W + cs || sy > H + cs) continue;
+    const bx = sx - cs * .28, by = sy + cs * .26, rr = Math.max(9, Math.min(20, cs * .2));
+    ctx.beginPath(); ctx.arc(bx, by, rr, 0, 7); ctx.fillStyle = c.o ? "rgba(13,15,14,.85)" : "rgba(80,20,15,.85)"; ctx.fill();
+    { const cd = bCond(c, now); ctx.lineWidth = 2; ctx.strokeStyle = !c.o ? "#e0533f" : cd >= 50 ? "#5fbf6a" : cd >= 20 ? "#e8a23a" : "#e0533f"; ctx.stroke(); }
+    if (now < c.b.ready) { const tot = c.b.dur || B_MIN[c.b.lv] * 60e3, f = 1 - (c.b.ready - now) / tot;
+      ctx.beginPath(); ctx.arc(bx, by, rr, -Math.PI / 2, -Math.PI / 2 + f * 2 * Math.PI); ctx.strokeStyle = "#d8a330"; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.font = rr * 1.1 + "px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(now < c.b.ready ? "🏗" : BUILD[c.b.t].i, bx, by + 1);
+    if (c.b.lv > 1 && rr > 10) { ctx.font = "700 " + Math.round(rr * .6) + "px system-ui"; ctx.fillStyle = "#d8a330"; ctx.fillText(c.b.lv, bx + rr * .9, by - rr * .8); }
+    const r = BUILD[c.b.t].out ? bReady(k) : 0;
+    if (r) { ctx.beginPath(); ctx.arc(bx + rr * .85, by + rr * .75, Math.max(6, rr * .45), 0, 7); ctx.fillStyle = "#d8a330"; ctx.fill();
+      ctx.font = "700 " + Math.max(9, Math.round(rr * .55)) + "px system-ui"; ctx.fillStyle = "#111"; ctx.fillText(r, bx + rr * .85, by + rr * .75 + 1); }
+  }
+  // микрорайоны
+  if (cs > 4) {
+    ctx.strokeStyle = "rgba(120,200,220,0.75)"; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath();
+    for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
+      const m = microOf[j * GW + i]; if (m < 0) continue;
+      const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
+      if (i + 1 >= GW || microOf[j * GW + i + 1] !== m) { ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); }
+      if (i === 0 || microOf[j * GW + i - 1] !== m) { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + cs); }
+      if (j === 0 || microOf[(j - 1) * GW + i] !== m) { ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); }
+      if (j + 1 >= GH || microOf[(j + 1) * GW + i] !== m) { ctx.moveTo(sx, sy); ctx.lineTo(sx + cs, sy); }
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+    MICRO.forEach((m, k) => { const [mx0, my0] = cellCenter(m.ci, m.tj); const [sx, sy] = toScr(mx0, my0 + CELL * .9);
+      ctx.font = "700 " + Math.max(11, Math.min(15, cs * .4)) + "px system-ui"; ctx.fillStyle = microFree(k) ? "#5fbf6a" : "#8fd0e0"; ctx.fillText("мкр " + m.n + (microFree(k) ? " ★" : ""), sx, sy); });
+  }
+  { const tg = storyTarget(); if (tg) { const [sx, sy] = toScr(...cellCenter(tg.i, tg.j)); ctx.font = Math.max(14, Math.min(22, cs * .5)) + "px system-ui"; ctx.fillText("⭐", sx + cs * .32, sy - cs * .32); } }
+  // событие, задания, торговец
+  const E = S.event;
+  if (E && E.t === "toxic") { const [sx, sy] = toScr(OX + (E.i - E.r) * CELL, OY + (E.j + E.r + 1) * CELL); ctx.fillStyle = "rgba(130,200,40,0.18)"; ctx.fillRect(sx, sy, cs * (2 * E.r + 1), cs * (2 * E.r + 1)); }
+  const mark = (i, j, ic) => { const [sx, sy] = toScr(...cellCenter(i, j)); ctx.font = Math.max(14, Math.min(24, cs * .6)) + "px system-ui"; ctx.fillText(ic, sx, sy); };
+  if (E && E.t === "drop") mark(E.i, E.j, "📦");
+  S.quests.forEach(q => { if (q.i !== undefined && q.t !== "clear") mark(q.i, q.j, "❗"); });
+  if (S.trader && cheb(S.trader.i, S.trader.j, S.p.i, S.p.j) <= 4) mark(S.trader.i, S.trader.j, "🐪");
+  (S.caches || []).forEach(c => mark(c.i, c.j, "🧰"));
+  if (S.hunt) { ctx.lineWidth = 2; S.hunt.pings.forEach((pg, n) => { const B = BANDS[pg.b], al = .25 + .6 * (n + 1) / S.hunt.pings.length;
+      ctx.strokeStyle = `rgba(190,120,255,${al})`;
+      const ring = r => { const [x, y] = toScr(OX + (pg.i - r) * CELL, OY + (pg.j + r + 1) * CELL); return [x, y, cs * (2 * r + 1)]; };
+      const [ox, oy, os] = ring(Math.min(B[1], 14)); ctx.strokeRect(ox, oy, os, os);
+      if (B[0] > 0) { const [ix, iy, is] = ring(B[0] - 1); ctx.setLineDash([4, 4]); ctx.strokeRect(ix, iy, is, is); ctx.setLineDash([]); } });
+    if (S.hunt.found) mark(S.hunt.i, S.hunt.j, "✨"); }
+  if (cs > 30) for (const k in S.cells) { const c = S.cells[k]; if (!gCount(c.g)) continue; const [gi, gj] = kij(k); const [sx, sy] = toScr(OX + gi * CELL, OY + (gj + 1) * CELL);
+    ctx.font = "600 " + Math.min(14, cs * .14) + "px system-ui"; ctx.fillStyle = "#e8d9b0"; ctx.textAlign = "left"; ctx.fillText("🛡" + gStr(c.g), sx + 4, sy + cs * .12); ctx.textAlign = "center"; }
+  // враги (видимые)
+  ents.forEach(e => {
+    if (!visible(e.i, e.j)) return;
+    const [sx, sy] = toScr(...cellCenter(e.i, e.j));
+    ctx.font = Math.max(12, Math.min(22, cs * .5)) + "px system-ui";
+    ctx.fillText(ENEMY[e.type].i, sx + (e.ox || 0) * cs, sy + (e.oy || 0) * cs);
+  });
+  // игрок
+  let [px, py] = cellCenter(S.p.i, S.p.j);
+  if (travel) { const k = Math.min(1, (now - travel.t0) / travel.dur); const [ax, ay] = cellCenter(travel.fi, travel.fj); px = ax + (px - ax) * k; py = ay + (py - ay) * k; }
+  const [sx, sy] = toScr(px, py);
+  ctx.beginPath(); ctx.arc(sx, sy, Math.max(7, Math.min(13, cs * .28)), 0, 7);
+  ctx.fillStyle = "#d8a330"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#0d0f0e"; ctx.stroke();
+  // ночь (по реальному времени Алматы)
+  const hr = new Date().getHours();
+  if (hr >= 21 || hr < 6) { ctx.fillStyle = "rgba(5,8,20,0.28)"; ctx.fillRect(0, 0, W, H); }
+}
+function visible(i, j) { // видно, если открыто и в радиусе 2 от игрока, или разведано
+  const c = S.cells[key(i, j)]; if (!c || !c.e) return false;
+  return cheb(i, j, S.p.i, S.p.j) <= 2;
+}
+
+/* ================== ВВОД: ПАН / ЗУМ / ТАП ================== */
+const ptrs = new Map(); let gesture = null;
+cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); startGesture(); });
+cv.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return; ptrs.get(e.pointerId).x = e.clientX; ptrs.get(e.pointerId).y = e.clientY;
+  if (!gesture) return;
+  const pts = [...ptrs.values()];
+  if (pts.length === 1 && gesture.n === 1) {
+    const dx = pts[0].x - gesture.x, dy = pts[0].y - gesture.y;
+    if (Math.hypot(dx, dy) > 6) gesture.moved = true;
+    cam.x = gesture.cx - dx / cam.s; cam.y = gesture.cy + dy / cam.s; dirty = true;
+  } else if (pts.length >= 2 && gesture.n >= 2) {
+    const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const mx = (pts[0].x + pts[1].x) / 2, my = (pts[0].y + pts[1].y) / 2;
+    const ns = clamp(gesture.s * d / gesture.d, MIN_S, MAX_S);
+    const r = cv.getBoundingClientRect();
+    cam.s = ns; cam.x = gesture.wx - (mx - r.left - W / 2) / ns; cam.y = gesture.wy + (my - r.top - H / 2) / ns;
+    gesture.moved = true; dirty = true;
+  }
+});
+const endPtr = e => {
+  const g = gesture; const p = ptrs.get(e.pointerId); ptrs.delete(e.pointerId);
+  if (g && g.n === 1 && !g.moved && p && ptrs.size === 0) { const r = cv.getBoundingClientRect(); onTap(p.x - r.left, p.y - r.top); }
+  if (ptrs.size) startGesture(); else gesture = null;
+};
+cv.addEventListener("pointerup", endPtr); cv.addEventListener("pointercancel", endPtr);
+function startGesture() {
+  const pts = [...ptrs.values()]; const r = cv.getBoundingClientRect();
+  if (pts.length === 1) gesture = {n: 1, x: pts[0].x, y: pts[0].y, cx: cam.x, cy: cam.y, moved: gesture ? gesture.moved : false};
+  else if (pts.length >= 2) {
+    const mx = (pts[0].x + pts[1].x) / 2, my = (pts[0].y + pts[1].y) / 2;
+    const [wx, wy] = toMerc(mx - r.left, my - r.top);
+    gesture = {n: 2, d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1, s: cam.s, wx, wy, moved: true};
+  }
+}
+cv.addEventListener("wheel", e => {
+  e.preventDefault(); const r = cv.getBoundingClientRect(); const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const [wx, wy] = toMerc(sx, sy); cam.s = clamp(cam.s * Math.exp(-e.deltaY * 0.0015), MIN_S, MAX_S);
+  cam.x = wx - (sx - W / 2) / cam.s; cam.y = wy + (sy - H / 2) / cam.s; dirty = true;
+}, {passive: false});
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ================== ИГРОВАЯ ЛОГИКА ================== */
+const SEC_PER_CELL = 4;         // время перехода на 1 клетку
+const EN_PER_CELL = 4;
+const RESPAWN = 20 * 60e3;      // восстановление лута
+const SCAN_R = 2;
+
+function reveal(i, j, r, scout) {
+  for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+    const a = i + di, b = j + dj; if (!inGrid(a, b) || !inCity[b * GW + a]) continue;
+    const c = C(key(a, b)); c.e = 1; if (scout) c.s = 1;
+  }
+  dirty = true;
+}
+function onTap(sx, sy) {
+  const [mx, my] = toMerc(sx, sy); const [i, j] = cellOf(mx, my);
+  if (!inGrid(i, j) || !inCity[j * GW + i]) return;
+  if (i === S.p.i && j === S.p.j) { setTab("act"); return; }
+  const c = S.cells[key(i, j)];
+  if (S.gps) { toast(c && c.e ? describe(i, j) : "Неизвестная территория"); return; }
+  if (busy || travel || fight) { toast("Сейчас занят"); return; }
+  const d = cheb(i, j, S.p.i, S.p.j);
+  if (d > moveR()) { toast(c && c.e ? describe(i, j) + " · далеко" : "Слишком далеко: радиус " + moveR() + " кл. (" + moveR() * CELL_REAL + " м)"); return; }
+  let cost = d * EN_PER_CELL, speed = 1;
+  if (carOn()) { if (S.tank < d * .5) { toast("Мало бензина: нужно " + d * .5); return; } S.tank -= d * .5; cost = 0; speed = 3; }
+  else if (S.vehicle === "bike") { cost = d * 2; speed = 2; }
+  if (S.p.en < cost) { toast("Не хватает энергии (" + cost + ")"); return; }
+  S.p.en -= cost; resting = false;
+  travel = {fi: S.p.i, fj: S.p.j, ti: i, tj: j, t0: Date.now(), dur: d * SEC_PER_CELL * 1000 / speed};
+  S.p.i = i; S.p.j = j; // целевая клетка; анимация из travel
+  renderPane();
+}
+function arrive() {
+  travel = null; enterCell(S.p.i, S.p.j);
+}
+function enterCell(i, j) {
+  const k = key(i, j); const c = C(k);
+  const first = !c.e;
+  reveal(i, j, 1, false);
+  const b = cellBase(i, j);
+  if (first && b.poi) log("Найдено: " + b.poi.n, "a");
+  if (baseTrap(i, j) && !c.td) {
+    if (c.s) { log("Вы обошли ловушку (" + b.n + ")"); }
+    else if (Math.random() < .6 * (1 - .3 * pk("stealth"))) {
+      const dmg = rnd(12, 26); hurt(dmg); c.td = 1;
+      log(pick(["Растяжка!", "Мина-ловушка!", "Химический выброс!", "Провал под асфальтом!"]) + " −" + dmg + " HP", "b");
+    } else { c.s = 1; log("Замечена ловушка — обошли", "a"); }
+  }
+  questsOnEnter(i, j); dropOnEnter(i, j); cacheOnEnter(i, j); storyCheck("enter");
+  checkEncounter(); renderAll(); save();
+}
+function describe(i, j) {
+  const b = cellBase(i, j); const d = distOf[j * GW + i]; const c = S.cells[key(i, j)] || {};
+  const z = zoneFaction(i, j);
+  return b.n + " · " + DISTRICTS[d].n + (c.o ? " · ваша" : z ? (z === "ai" ? " · зона ИИ" : " · зона банды") : "");
+}
+function hurt(d) {
+  d = d * (1 - .1 * pk("tough")); if (S.vest) d = d * (1 - ITEMS.vest.armor); d = Math.max(1, Math.round(d));
+  S.p.hp = Math.max(0, S.p.hp - d); resting = false;
+  if (S.p.hp <= 0) die(); return d;
+}
+function die() {
+  S.deaths++; fight = null; closeModal(); busy = null; travel = null; hideProgress();
+  log("Вы погибли. Рюкзак потерян.", "b");
+  const own = Object.keys(S.cells).filter(k => S.cells[k].o);
+  const home = S.base && (S.cells[S.base] || {}).o ? S.base.split(",").map(Number) : own.length ? own[0].split(",").map(Number) : [START.i, START.j];
+  S.p = {i: home[0], j: home[1], hp: 60, food: 60, water: 60, en: 60};
+  S.inv = {water: 1, rusk: 1}; S.weapon = null; S.vest = false; S.vehicle = null; S.tank = 0;
+  ents = []; centerOnPlayer(); renderAll(); save();
+  openModal(`<h3>☠ Вы погибли</h3><p class="muted">Очнулись ${S.base ? "в убежище" : own.length ? "на своей территории" : "у Площади Республики"}. Рюкзак потерян; склад убежища и территории сохранены.</p><div class="acts"><button class="btn acc" onclick="closeModal()">Дальше</button></div>`);
+}
+
+/* ----- инвентарь ----- */
+const weight = () => Object.entries(S.inv).reduce((a, [k, n]) => a + ITEMS[k].w * n, 0) + (S.vest ? ITEMS.vest.w : 0);
+function addItem(k, n) {
+  const room = Math.floor((maxW() - weight()) / ITEMS[k].w + 1e-9);
+  const take = Math.max(0, Math.min(n, room));
+  if (take > 0) S.inv[k] = (S.inv[k] || 0) + take;
+  return take;
+}
+function useItem(k) {
+  const it = ITEMS[k]; if (!S.inv[k]) return;
+  if (it.use) {
+    if (it.use.food) S.p.food = Math.min(100, S.p.food + it.use.food);
+    if (it.use.water) S.p.water = Math.min(100, S.p.water + it.use.water);
+    if (it.use.hp) S.p.hp = Math.min(100, S.p.hp + it.use.hp);
+    dec(k); log("Использовано: " + it.n);
+  } else if (it.dmg) { S.weapon = k; log("Оружие: " + it.n); }
+  else if (k === "vest") { if (!S.vest) { dec(k); S.vest = true; log("Надет бронежилет", "g"); } }
+  renderAll(); save();
+}
+function dec(k, n = 1) { S.inv[k] -= n; if (S.inv[k] <= 0) { delete S.inv[k]; if (S.weapon === k) S.weapon = null; } }
+function dropItem(k) { dec(k); renderAll(); save(); }
+function craftEmp() {
+  if ((S.inv.parts || 0) < 4 || (S.inv.batt || 0) < 2) return;
+  dec("parts", 4); dec("batt", 2); S.inv.emp = (S.inv.emp || 0) + 1; log("Собрана ЭМИ-граната", "g"); renderAll(); save();
+}
+function playerDmg() { const r = rawDmg(); r.d = Math.round(r.d * (1 + .15 * pk("fight"))); return r; }
+function rawDmg() {
+  const w = S.weapon && S.inv[S.weapon] ? ITEMS[S.weapon] : null;
+  if (!w) return {d: rnd(3, 6), n: "кулаки"};
+  if (w.ammo) { if ((S.inv[w.ammo] || 0) > 0) { dec(w.ammo); return {d: rnd(w.dmg - 4, w.dmg + 4), n: w.n}; } return {d: rnd(4, 7), n: w.n + " (без патронов)"}; }
+  return {d: rnd(w.dmg - 3, w.dmg + 3), n: w.n};
+}
+
+/* ----- действия с таймером ----- */
+function startBusy(label, sec, en, done) {
+  if (busy || travel || fight) return;
+  if (S.p.en < en) { toast("Не хватает энергии (" + en + ")"); return; }
+  S.p.en -= en; resting = false;
+  busy = {label, t0: Date.now(), dur: sec * 1000, done, i: S.p.i, j: S.p.j};
+  showProgress(); renderAll();
+}
+function cancelBusy() { busy = null; hideProgress(); renderAll(); }
+function showProgress() { document.getElementById("progress").style.display = "block"; document.getElementById("pText").textContent = busy.label; }
+function hideProgress() { document.getElementById("progress").style.display = "none"; }
+document.getElementById("pCancel").onclick = cancelBusy;
+
+function lootLeft(c) { if (c.ls && Date.now() - c.ls >= RESPAWN) { c.lc = 0; } return 3 - (c.lc || 0); }
+function actSearch() {
+  const k = key(S.p.i, S.p.j), c = C(k);
+  if (lootLeft(c) <= 0) return;
+  startBusy("Обыск…", 8, 8, () => {
+    const b = cellBase(S.p.i, S.p.j); const table = LOOT[b.t] || LOOT.res;
+    c.lc = (c.lc || 0) + 1; c.ls = Date.now();
+    const found = [];
+    const rolls = (Math.random() < .25 ? 0 : rnd(1, b.poi ? 3 : 2)) + (Math.random() < .2 * pk("loot") ? 1 : 0);
+    for (let r = 0; r < rolls; r++) {
+      const tot = table.reduce((a, x) => a + x[1], 0); let v = Math.random() * tot;
+      for (const [it, w, mn, mx] of table) { v -= w; if (v <= 0) { const got = addItem(it, rnd(mn, mx)); if (got) found.push(ITEMS[it].n + (got > 1 ? " ×" + got : "")); else found.push("(нет места: " + ITEMS[it].n + ")"); break; } }
+    }
+    log(found.length ? "Найдено: " + found.join(", ") : "Ничего полезного", found.length ? "g" : "");
+    if (Math.random() < (zoneFaction(S.p.i, S.p.j) ? .25 : .08) * (1 - .3 * pk("stealth"))) spawnNear("ambush");
+    gainXp(2);
+  });
+}
+function actScout() {
+  startBusy("Разведка местности…", 5, 6, () => {
+    reveal(S.p.i, S.p.j, SCAN_R, true);
+    const traps = []; for (let dj = -SCAN_R; dj <= SCAN_R; dj++) for (let di = -SCAN_R; di <= SCAN_R; di++) {
+      const a = S.p.i + di, b = S.p.j + dj; if (inGrid(a, b) && inCity[b * GW + a] && baseTrap(a, b) && !(S.cells[key(a, b)] || {}).td) traps.push(1); }
+    const en = ents.filter(e => cheb(e.i, e.j, S.p.i, S.p.j) <= SCAN_R).length;
+    log("Разведка: ловушек " + traps.length + ", врагов " + en, "a"); gainXp(1); storyCheck("scout");
+  });
+}
+function actDisarm() {
+  const c = C(key(S.p.i, S.p.j));
+  startBusy("Обезвреживание…", 7, 6, () => {
+    if (Math.random() < .8) { c.td = 1; const g = addItem("parts", 2); log("Ловушка обезврежена" + (g ? ", +" + g + " детали" : ""), "g"); gainXp(3); }
+    else { c.td = 1; const d = hurt(rnd(8, 16)); log("Ловушка сработала! −" + d + " HP", "b"); }
+  });
+}
+function canCapture() {
+  const c = S.cells[key(S.p.i, S.p.j)] || {};
+  if (c.o) return [false, "Уже ваша"];
+  if (safeCell(S.p.i, S.p.j)) return [false, "Нейтральная территория"];
+  if (ents.some(e => cheb(e.i, e.j, S.p.i, S.p.j) <= (zoneFaction(S.p.i, S.p.j) ? 1 : 0))) return [false, "Рядом враги"];
+  if (baseTrap(S.p.i, S.p.j) && !c.td) return [false, "Сначала обезвредьте ловушку"];
+  const z = zoneOf[S.p.j * GW + S.p.i];
+  if (z >= 0 && POIS[z].f && poiAlive(z)) return [false, "Зону держит: " + POIS[z].n + " — уничтожьте охрану центра"];
+  return [true, ""];
+}
+function poiAlive(z) { const st = S.cells[key(POIS[z].i, POIS[z].j)] || {}; return !st.cleared; }
+function actCapture() {
+  const [ok, why] = canCapture(); if (!ok) { toast(why); return; }
+  startBusy("Захват территории…", 15, 15, () => {
+    const c = C(key(S.p.i, S.p.j)); c.o = 1; c.oc = c.oy = Date.now(); gainXp(8);
+    const d = distOf[S.p.j * GW + S.p.i]; log("Территория захвачена · " + DISTRICTS[d].n, "g"); questProgress("capture", d); storyCheck("capture");
+    const pct = distPct(d); if (pct >= 60 && !(S.dist || {})[d]) { (S.dist = S.dist || {})[d] = 1; log("★ " + DISTRICTS[d].n + " район под вашим контролем! Доход района ×1.5", "g"); gainXp(100); toast("★ Район захвачен: " + DISTRICTS[d].n); }
+  });
+}
+function actFortify() {
+  if ((S.inv.parts || 0) < 5) return;
+  startBusy("Строим баррикады…", 12, 10, () => { dec("parts", 5); C(key(S.p.i, S.p.j)).f = 1; log("Клетка укреплена", "g"); });
+}
+function actBase() {
+  if ((S.inv.parts || 0) < 10) return;
+  startBusy("Обустраиваем убежище…", 20, 15, () => {
+    dec("parts", 10); const k = key(S.p.i, S.p.j); const c = C(k); c.f = 1;
+    if (S.base && S.base !== k) log("Старое убежище брошено. Склад перенесён.", "a");
+    S.base = k; log("🏠 Убежище обустроено: склад, верстак, возрождение", "g"); gainXp(15);
+  });
+}
+function actTrap() {
+  const c = C(key(S.p.i, S.p.j)); if (!S.inv.trap || (c.mt || 0) >= 2) return;
+  dec("trap"); c.mt = (c.mt || 0) + 1; log("Растяжка установлена (" + c.mt + "/2)", "g"); renderAll(); save();
+}
+/* ----- залежи хабара: качество клетки по ресурсу (детерминированный шум + тип клетки) ----- */
+const DEPO = {
+  soil:  {n:"Плодородная земля", i:"🌱", t:{private:.3, park:.3, res:.1, landmark:.1}},
+  water: {n:"Грунтовая вода",    i:"💧", t:{park:.35, metro:.2, res:.1, station:.1}},
+  scrap: {n:"Металлолом",        i:"🔩", t:{garage:.4, empty:.25, power:.3, station:.2, private:.15, tower:.15}},
+  grid:  {n:"Энергосеть",        i:"⚡", t:{power:.45, tower:.35, office:.2, highrise:.2, mall:.15}},
+  meds:  {n:"Медсклады",         i:"💊", t:{pharm:.45, hospital:.45, mall:.15}},
+  cache: {n:"Схроны",            i:"📦", t:{police:.45, military:.5, hideout:.35, market:.15}},
+};
+const DEPO_SEED = {soil: 11, water: 23, scrap: 37, grid: 41, meds: 53, cache: 67};
+function vnoise(x, y, s) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  const a = hash(xi, yi, s), b = hash(xi + 1, yi, s), c = hash(xi, yi + 1, s), d = hash(xi + 1, yi + 1, s);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const depoCache = new Map();
+function depoQ(i, j, d) {         // 0.05..1
+  const ck = d + i + "," + j; let q = depoCache.get(ck); if (q !== undefined) return q;
+  const s = DEPO_SEED[d], n = vnoise(i / 7, j / 7, s) * .75 + vnoise(i / 2.3, j / 2.3, s + 5) * .25;
+  const n2 = Math.max(0, Math.min(1, (n - .28) / .44));   // растягиваем контраст: шум кучкуется у 0.5
+  q = Math.max(.05, Math.min(1, Math.pow(n2, 1.3) * .85 + (DEPO[d].t[cellBase(i, j).t] || 0)));
+  depoCache.set(ck, q); return q;
+}
+const qMult = q => .4 + 1.6 * q;  // 5% → ×0.48, 50% → ×1.2, 100% → ×2
+const pct = q => Math.round(q * 100) + "%";
+const qColor = q => q >= .7 ? "#5fbf6a" : q >= .4 ? "#d8a330" : "#e0533f";
+
+/* ----- сканер ----- */
+function openScan() {
+  openModal(`<h3>📡 Сканер «Тұмар-лом»</h3><p class="muted">Перехваченный модуль ИИ. Показывает залежь в радиусе ${scanR()} кл. на ${scanMin()} минут. Тратит 1 батарейку (рюкзак или склад).</p>
+    <div class="acts">${Object.entries(DEPO).map(([d, D]) => `<button class="btn ${have("batt") ? "acc" : ""}" ${have("batt") ? "" : "disabled"} onclick="doScan('${d}')">${D.i} ${D.n}<small>здесь: ${pct(depoQ(S.p.i, S.p.j, d))}</small></button>`).join("")}
+    <button class="btn" onclick="closeModal()">Закрыть</button></div>`);
+}
+const SCAN_DEPO_R = 4;
+const scanR = () => SCAN_DEPO_R + specBest("scanlab") + coreLv("sight"), scanMin = () => 10 + 5 * specBest("scanlab");
+function doScan(d) {
+  if (!have("batt")) return; closeModal();
+  startBusy("Сканирование: " + DEPO[d].n + "…", 4, 4, () => {
+    pay({batt: 1}); const R = scanR(); S.scan = {d, i: S.p.i, j: S.p.j, r: R, until: Date.now() + scanMin() * 60e3};
+    let best = null; for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) { const a = S.p.i + di, b = S.p.j + dj;
+      if (!inGrid(a, b) || !inCity[b * GW + a]) continue; const q = depoQ(a, b, d); if (!best || q > best.q) best = {q, a, b}; }
+    log(`📡 Скан «${DEPO[d].n}»: лучшая точка ${pct(best.q)} в ${cheb(best.a, best.b, S.p.i, S.p.j)} кл.`, "a"); gainXp(2);
+    if (cam.s < 0.05) cam.s = 0.08; centerOnPlayer();
+  });
+}
+
+/* ----- износ построек ----- */
+const WEAR_H = 1;                 // % в час
+function bCond(c, now = Date.now()) {
+  if (!c || !c.b) return 0; if (now < c.b.ready) return 100;
+  const w = c.b.w || c.b.ready, wh = c.b.wh === undefined ? 100 : c.b.wh;
+  return Math.max(0, wh - Math.max(0, now - w) / 3600e3 * WEAR_H * (1 - .2 * coreLv("repair")));
+}
+const condMult = cond => cond >= 50 ? 1 : Math.max(.2, cond / 50);
+const repairParts = c => Math.ceil((100 - bCond(c)) / 10);
+const repairMoney = c => repairParts(c) * 4;
+function repairHere() {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c || !c.b) return; const n = repairParts(c);
+  if (!n || !canPay({parts: n})) return; closeModal();
+  startBusy("Ремонт…", 5, 5, () => { if (!canPay({parts: n})) return; pay({parts: n}); c.b.w = Date.now(); c.b.wh = 100; log(`🔧 ${BUILD[c.b.t].n} отремонтирован(а): −${n} деталей`, "g"); });
+}
+function repairRemote(k) {
+  const c = S.cells[k]; if (!c || !c.b) return; const m = repairMoney(c); if (!m || S.money < m) return;
+  S.money -= m; c.b.w = Date.now(); c.b.wh = 100; log(`🔧 Бригада лагеря отремонтировала ${BUILD[c.b.t].n}: −${m} 💰`, "g"); renderAll(); save();
+}
+
+/* ----- барахолка: плавающие цены, дефицит ----- */
+const MKT_BUY = ["can","veg","water","rusk","band","medkit","parts","batt","rebar","ammo","fuel","akb","mask","emp","trap","molotov","vest","pistol"];
+const mIdx = k => (S.mkt || {})[k] || 1;
+const isDef = k => S.deficit && S.deficit.k === k && Date.now() < S.deficit.until;
+const atCamp = () => cellBase(S.p.i, S.p.j).t === "camp";
+const fee = () => atCamp() ? 1 : [.75, .85, .92, 1][specBest("courier")];
+const sellP = k => Math.max(1, Math.floor(VAL[k] * mIdx(k) * (isDef(k) ? 1.6 : 1) * fee()));
+const buyP = k => Math.max(1, Math.ceil(VAL[k] * mIdx(k) * (isDef(k) ? 1.6 : 1) * 1.5 / fee()));
+let lastMkt = 0;
+function mktTick(now) {
+  if (now - lastMkt < 60e3) return; const mins = lastMkt ? (now - lastMkt) / 60e3 : 1; lastMkt = now;
+  const m = S.mkt || (S.mkt = {}); for (const k in m) { m[k] += (1 - m[k]) * (1 - Math.pow(.99, mins)); if (Math.abs(m[k] - 1) < .01) delete m[k]; }
+  if (!S.deficit || now >= S.deficit.until) { const k = pick(MKT_BUY.slice(0, 12)); S.deficit = {k, until: now + 60 * 60e3}; log(`🛒 На барахолке дефицит: ${ITEMS[k].n} — платят ×1.6`, "a"); }
+}
+const trend = k => mIdx(k) > 1.08 ? `<span style="color:var(--good)">▲</span>` : mIdx(k) < .92 ? `<span style="color:var(--bad)">▼</span>` : "";
+function openMarket() {
+  const sell = Object.entries(S.inv).filter(([k]) => VAL[k]).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}${isDef(k) ? " 🔥" : ""}<small>${sellP(k)} 💰 ${trend(k)}</small></div><button class="btn mini" onclick="mSell('${k}',1)">1</button><button class="btn mini acc" onclick="mSell('${k}',${n})">все</button></div>`).join("");
+  const buy = MKT_BUY.map(k => `<div class="row"><div class="n">${ITEMS[k].n}${isDef(k) ? " 🔥" : ""}<small>${buyP(k)} 💰 ${trend(k)}</small></div><button class="btn mini ${S.money >= buyP(k) ? "acc" : ""}" ${S.money >= buyP(k) ? "" : "disabled"} onclick="mBuy('${k}')">Купить</button></div>`).join("");
+  openModal(`<h3>🛒 Барахолка</h3><p class="muted">У вас ${S.money} 💰. ${atCamp() ? "Вы в лагере: без наценки." : fee() < 1 ? `Через курьера по рации: наценка ${Math.round((1 - fee()) * 100)}% (курьерская служба снижает её). В лагере дешевле.` : "Курьерская служба ур. 3: без наценки."} Продажи роняют цену, покупки поднимают, со временем цены возвращаются к норме.${S.deficit && Date.now() < S.deficit.until ? ` 🔥 Дефицит: ${ITEMS[S.deficit.k].n}, ещё ${Math.ceil((S.deficit.until - Date.now()) / 60e3)} мин.` : ""}</p>
+    <b>Продать</b>${sell || '<p class="muted">рюкзак пуст</p>'}<b style="display:block;margin-top:8px">Купить</b>${buy}<div class="acts"><button class="btn" onclick="closeModal();renderAll()">Закрыть</button></div>`);
+  document.getElementById("mbox").style.maxHeight = "80vh"; document.getElementById("mbox").style.overflow = "auto";
+}
+function mSell(k, n) {
+  const m = S.mkt || (S.mkt = {}); let got = 0;
+  for (let x = 0; x < n && S.inv[k]; x++) { got += sellP(k); dec(k); m[k] = Math.max(.35, mIdx(k) - .03); }
+  S.money += got; log(`🛒 Продано: ${ITEMS[k].n} ×${n} за ${got} 💰`, "g"); save(); openMarket();
+}
+function mBuy(k) {
+  const p = buyP(k); if (S.money < p) return; if (!addItem(k, 1)) { toast("Рюкзак полон"); return; }
+  S.money -= p; (S.mkt || (S.mkt = {}))[k] = Math.min(3, mIdx(k) + .04); save(); openMarket();
+}
+/* ----- постройки на своих клетках (в духе Resources: строятся в реальном времени, копят продукцию) ----- */
+// g: raw — добывает сырьё; proc — цех, перерабатывает (берёт сырьё из своего бункера и у соседних построек); def — защита; hq — штаб
+const BUILD = {
+  garden: {g:"raw", n:"Огород",      i:"🌱", d:"выращивает овощи",                   cost:{parts:4, water:2},   out:"veg",   every:15, cap:4, depo:"soil"},
+  well:   {g:"raw", n:"Водосборник", i:"🚰", d:"собирает и чистит воду",             cost:{parts:5, rebar:1},   out:"water", every:15, cap:4, depo:"water"},
+  scrap:  {g:"raw", n:"Разборка",    i:"🔩", d:"разбирает хлам на детали",           cost:{parts:6, rebar:1},   out:"parts", every:15, cap:5, depo:"scrap"},
+  gen:    {g:"raw", n:"Генератор",   i:"🔋", d:"заряжает батарейки",                 cost:{parts:8, akb:1},     out:"batt",  every:20, cap:4, depo:"grid"},
+  med:    {g:"raw", n:"Медпункт",    i:"⛑", d:"бинты; отдых на клетке лечит вдвое быстрее", cost:{parts:8, band:3}, out:"band", every:20, cap:4, depo:"meds"},
+  armory: {g:"raw", n:"Оружейная",   i:"🔫", d:"снаряжает патроны",                  cost:{parts:10, batt:3},   out:"ammo",  per:3, every:20, cap:4, depo:"cache"},
+  cannery:{g:"proc",n:"Консервный цех", i:"🥫", d:"овощи + вода → консервы",          cost:{parts:10, rebar:2},  in:{veg:2, water:1}, out:"can",    every:10, cap:6},
+  biofuel:{g:"proc",n:"Перегонка",   i:"⛽", d:"овощи → биотопливо (бензин)",        cost:{parts:10, batt:2},   in:{veg:3},          out:"fuel",   every:15, cap:4},
+  lab:    {g:"proc",n:"Лаборатория", i:"⚗", d:"бинты + вода → аптечка",             cost:{parts:12, batt:3},   in:{band:3, water:1}, out:"medkit", every:15, cap:4},
+  works:  {g:"proc",n:"Сборочный цех", i:"🛠", d:"детали + батарейки → ЭМИ-граната", cost:{parts:14, batt:4},   in:{parts:4, batt:2}, out:"emp",    every:20, cap:3},
+  tower:  {g:"def", n:"Вышка",       i:"🔦", d:"обзор вокруг; набеги в радиусе 2 кл. отбиваются в 50% случаев", cost:{parts:6, rebar:2}},
+  turret: {g:"def", n:"Самострел",   i:"🎯", d:"набеги на эту и соседние клетки отбиваются всегда", cost:{parts:12, batt:4, ammo:10}},
+  scanlab:{g:"spec",n:"Мастерская сканера", i:"🔭", d:"сканер: +1 кл. радиуса и +5 мин за уровень (берётся лучшая мастерская)", cost:{parts:12, batt:4}},
+  firepost:{g:"spec",n:"Пожарный пост",  i:"🚒", d:"в радиусе 3 кл. пожары тушатся: 30% за уровень", cost:{parts:10, water:4}},
+  seismo: {g:"spec",n:"Сейсмокаркас",    i:"🗜", d:"в радиусе 3 кл. урон от толчков −30% за уровень", cost:{parts:12, rebar:3}},
+  jammer: {g:"spec",n:"Глушилка",        i:"📶", d:"в радиусе 3 кл. удары дронов ИИ сбиваются: 30% за уровень", cost:{parts:10, batt:4}},
+  barracks:{g:"spec",n:"Казарма",        i:"⛺", d:"найм охраны: ур.1 собаки, ур.2 ополченцы, ур.3 ветераны", cost:{parts:14, can:4}},
+  recycler:{g:"spec",n:"Пункт приёма лома", i:"♻", d:"переработка находок из тайников, +25% за уровень", cost:{parts:8, rebar:2}},
+  courier:{g:"spec",n:"Курьерская служба", i:"🚲", d:"наценка курьера на барахолке: 15% / 8% / 0%", cost:{parts:8, money:30}},
+  hq:     {g:"hq",  n:"Штаб",        i:"🏢", d:"один на игрока; постройки в радиусе 3 кл. работают быстрее: +25% за уровень", cost:{parts:20, batt:5, money:40}},
+};
+const B_GROUPS = [["raw", "Добыча"], ["proc", "Переработка: берёт сырьё у соседних построек"], ["def", "Оборона"], ["spec", "Спецздания: действуют в радиусе 3 кл."], ["hq", "Особое"]];
+const B_MAX = 3, B_MIN = [0, 2, 5, 10];   // время стройки уровня, мин
+const HQ_R = 3;
+const bCost = (t, lv) => Object.fromEntries(Object.entries(BUILD[t].cost).map(([k, n]) => [k, n * lv]));
+const have = k => k === "money" ? S.money : (S.inv[k] || 0) + (S.stash[k] || 0);
+const itName = k => k === "money" ? "Жетоны" : ITEMS[k].n;
+const canPay = cost => Object.entries(cost).every(([k, n]) => have(k) >= n);
+function pay(cost) {
+  for (const [k, n] of Object.entries(cost)) {
+    if (k === "money") { S.money -= n; continue; }
+    const a = Math.min(n, S.inv[k] || 0); if (a) dec(k, a);
+    const b = n - a; if (b) { S.stash[k] -= b; if (S.stash[k] <= 0) delete S.stash[k]; }
+  }
+}
+const costTxt = cost => Object.entries(cost).map(([k, n]) => `<span style="color:${have(k) >= n ? "var(--text)" : "var(--bad)"}">${itName(k)} ${have(k)}/${n}</span>`).join(" · ");
+const bWorking = (c, now = Date.now()) => c && c.b && c.o && now >= c.b.ready;            // достроена и клетка ваша
+const bLv = (c, now = Date.now()) => !c || !c.b ? 0 : now >= c.b.ready ? c.b.lv : c.b.lv - 1;  // при апгрейде — старый уровень
+const kij = k => k.split(",").map(Number);
+function hqCell() { for (const k in S.cells) if (S.cells[k].b && S.cells[k].b.t === "hq") return k; return null; }
+function hqBoost(i, j) {          // множитель скорости от штаба
+  const k = hqCell(); if (!k) return 1; const c = S.cells[k]; if (!bWorking(c)) return 1;
+  const [a, b] = kij(k); return cheb(a, b, i, j) <= HQ_R ? 1 + .25 * c.b.lv : 1;
+}
+function bEvery(k) {   // интервал выработки: база / (штаб × качество залежи × состояние)
+  const [i, j] = kij(k), c = S.cells[k], B = BUILD[c.b.t];
+  const core = B.g === "raw" ? 1 + .1 * coreLv("harvest") : 1 + .15 * coreLv("synth");
+  return B.every * 60e3 / (hqBoost(i, j) * (B.depo ? qMult(depoQ(i, j, B.depo)) : 1) * condMult(bCond(c)) * core);
+}
+function bPerTick(k) {
+  const c = S.cells[k], B = BUILD[c.b.t]; const [i, j] = kij(k);
+  return bLv(c) * (B.per || 1);
+}
+const bCap = k => { const c = S.cells[k], B = BUILD[c.b.t]; return B.g === "proc" ? B.cap * bLv(c) : B.cap * bLv(c) * bPerTick(k); };
+function bTicks(k, now = Date.now()) {   // готовые «порции» продукции у добывающих
+  const c = S.cells[k]; if (!c || !c.b || !c.o || BUILD[c.b.t].g !== "raw" || bLv(c, now) < 1) return 0;
+  return Math.min(BUILD[c.b.t].cap * bLv(c, now), Math.floor((now - c.b.y) / bEvery(k)));
+}
+const bReady = k => { const c = S.cells[k]; return BUILD[c.b.t].g === "proc" ? (c.b.st || 0) : bTicks(k) * bPerTick(k); };
+function takeTick(k) {            // забрать одну порцию у добывающей постройки (для цеха-соседа)
+  const c = S.cells[k], ev = bEvery(k), now = Date.now();
+  c.b.y = Math.max(c.b.y, now - BUILD[c.b.t].cap * bLv(c) * ev) + ev; return bPerTick(k);
+}
+const neighbors = (i, j) => { const r = []; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (di || dj) { const k = key(i + di, j + dj); if (S.cells[k] && S.cells[k].b) r.push(k); } return r; };
+const suppliers = (k, item) => { const [i, j] = kij(k); return neighbors(i, j).filter(n => bWorking(S.cells[n]) && BUILD[S.cells[n].b.t].g === "raw" && BUILD[S.cells[n].b.t].out === item); };
+function procTick(k, now) {       // цех: перерабатывает партии, пока есть сырьё и место
+  const c = S.cells[k], B = BUILD[c.b.t]; if (!bWorking(c, now)) return;
+  const lv = bLv(c, now), ev = bEvery(k), buf = c.b.inb || (c.b.inb = {});
+  for (let guard = 0; guard < 60 && now - c.b.y >= ev; guard++) {
+    if ((c.b.st || 0) >= B.cap * lv) { c.b.y = now; return; }       // склад цеха полон — простой
+    for (const [it, n] of Object.entries(B.in)) {                    // добрать сырьё у соседей
+      const need = n * lv; for (const s of suppliers(k, it)) { while ((buf[it] || 0) < need && bTicks(s, now) > 0) buf[it] = (buf[it] || 0) + takeTick(s); }
+    }
+    if (!Object.entries(B.in).every(([it, n]) => (buf[it] || 0) >= n * lv)) { c.b.y = now; return; }  // нет сырья — простой
+    for (const [it, n] of Object.entries(B.in)) buf[it] -= n * lv;
+    c.b.st = (c.b.st || 0) + lv; c.b.y += ev;
+  }
+}
+function nearDefense(i, j) {      // защита от набега постройками
+  let tower = false;
+  for (const k in S.cells) { const c = S.cells[k]; if (!bWorking(c)) continue;
+    const [a, b] = kij(k), d = cheb(a, b, i, j);
+    if (c.b.t === "turret" && d <= 1) return "turret";
+    if (c.b.t === "tower" && d <= 2) tower = true; }
+  return tower ? "tower" : null;
+}
+function openBuild() {
+  const k = key(S.p.i, S.p.j), c = S.cells[k] || {}; if (!c.o) return;
+  const here = cellBase(S.p.i, S.p.j).t, hq = hqCell();
+  if (!c.b) {
+    const row = ([t, B]) => { const cost = bCost(t, 1), uniq = t === "hq" && hq, ok = canPay(cost) && !uniq, dq = B.depo ? depoQ(S.p.i, S.p.j, B.depo) : 0;
+      const prod = B.g === "raw" ? ` · ${ITEMS[B.out].n} ×${B.per || 1} / ${B.every} мин` : B.g === "proc" ? ` · ${B.every} мин на партию` : "";
+      return `<div class="row"><div class="n">${B.i} ${B.n}${B.depo ? ` <span style="color:${qColor(dq)}">${DEPO[B.depo].n} ${pct(dq)}</span>` : ""}<small>${B.d}${prod}</small><small>${uniq ? "уже построен" : costTxt(cost)}</small></div><button class="btn mini ${ok ? "acc" : ""}" ${ok ? "" : "disabled"} onclick="startBuild('${t}')">Строить</button></div>`; };
+    const boost = hqBoost(S.p.i, S.p.j);
+    const rows = B_GROUPS.map(([g, title]) => `<b style="display:block;margin-top:8px">${title}</b>` + Object.entries(BUILD).filter(([, B]) => B.g === g).map(row).join("")).join("");
+    openModal(`<h3>🏗 Строительство</h3><p class="muted">Одна постройка на клетку, стройка уровня 1 — ${B_MIN[1]} мин. Материалы берутся из рюкзака, затем со склада.${boost > 1 ? ` <span style="color:var(--good)">Штаб рядом: +${Math.round((boost - 1) * 100)}% скорости.</span>` : ""}</p>${rows}<div class="acts"><button class="btn" onclick="closeModal()">Закрыть</button></div>`);
+    document.getElementById("mbox").style.maxHeight = "80vh"; document.getElementById("mbox").style.overflow = "auto";
+  } else {
+    const B = BUILD[c.b.t], now = Date.now(), lv = bLv(c, now), building = now < c.b.ready;
+    const next = c.b.lv + 1, cost = next <= B_MAX ? bCost(c.b.t, next) : null, ready = bReady(k), boost = hqBoost(S.p.i, S.p.j);
+    const evMin = Math.round(bEvery(k) / 6e3) / 10;
+    let info = "";
+    if (B.g === "raw" && lv) info = `<p>Производит ${ITEMS[B.out].n} ×${bPerTick(k)} каждые ${evMin} мин, хранит до ${bCap(k)}.<br>Готово: <b>${ready}</b></p>`;
+    if (B.g === "proc" && lv) { const buf = c.b.inb || {};
+      info = `<p>Партия: ${Object.entries(B.in).map(([it, n]) => ITEMS[it].n + " ×" + n * lv).join(" + ")} → ${ITEMS[B.out].n} ×${lv}, ${evMin} мин. Склад цеха до ${bCap(k)}.<br>Готово: <b>${ready}</b></p>
+        <b>Сырьё</b>${Object.keys(B.in).map(it => { const sp = suppliers(k, it), avail = sp.reduce((a, s) => a + bTicks(s) * bPerTick(s), 0);
+          return `<div class="row"><div class="n">${ITEMS[it].n}: в бункере ${buf[it] || 0}<small>${sp.length ? "соседи-поставщики: " + sp.length + ", у них готово " + avail : "нет соседа-поставщика — постройте рядом " + Object.values(BUILD).filter(x => x.out === it && x.g === "raw").map(x => x.n).join(" / ")}</small></div><button class="btn mini" ${have(it) ? "" : "disabled"} onclick="loadInput('${it}')">Загрузить ${Math.min(have(it), 20)}</button></div>`; }).join("")}`; }
+    if (B.g === "hq" && lv) { let n = 0; const [hi, hj] = kij(k); for (const q in S.cells) { const [a, b] = kij(q); if (q !== k && S.cells[q].b && cheb(a, b, hi, hj) <= HQ_R) n++; }
+      info = `<p>Ускоряет постройки в радиусе ${HQ_R} кл. на <b>+${lv * 25}%</b>. Сейчас в зоне: ${n}.</p>`; }
+    if (B.g === "def" && lv) info = `<p>Работает.</p>`;
+    if (c.b.t === "barracks" && lv) info = `<p>Резерв: ${unitsTxt(S.reserve)}. Расставить бойцов можно кнопкой 🛡 Охрана на любой своей клетке.</p>` + Object.entries(UNITS).map(([u, U]) => `<div class="row"><div class="n">${U.i} ${U.n} · сила ${U.str}<small>${lv >= U.lv ? costTxt(U.cost) : "нужна казарма ур. " + U.lv}</small></div><button class="btn mini ${lv >= U.lv && canPay(U.cost) ? "acc" : ""}" ${lv >= U.lv && canPay(U.cost) ? "" : "disabled"} onclick="hireUnit('${u}')">Нанять</button></div>`).join("");
+    if (c.b.t === "recycler" && lv) { const its = Object.keys(RECYCLE).filter(it => S.inv[it]);
+      info = `<p class="muted">Переработка ×${(1 + .25 * (lv - 1) + .15 * coreLv("synth")).toFixed(2)}. Монеты, часы и кольца не перерабатываются, их лучше продать.</p>` + (its.map(it => `<div class="row"><div class="n">${ITEMS[it].n} ×${S.inv[it]}<small>→ ${Object.entries(RECYCLE[it]).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ")}</small></div><button class="btn mini acc" onclick="recycle('${it}')">♻</button></div>`).join("") || `<p class="muted">В рюкзаке нет лома. Ищите 🧰 тайники на карте.</p>`); }
+    if (B.g === "spec" && lv && !info) info = `<p>Работает: ${B.d}.</p>`;
+    if (B.depo) info = `<p class="muted">Залежь: ${DEPO[B.depo].n} <b style="color:${qColor(depoQ(S.p.i, S.p.j, B.depo))}">${pct(depoQ(S.p.i, S.p.j, B.depo))}</b> (×${qMult(depoQ(S.p.i, S.p.j, B.depo)).toFixed(2)} к скорости)</p>` + info;
+    if (lv) { const cd = bCond(c), rp = repairParts(c);
+      info += `<p>Состояние: <b style="color:${cd >= 50 ? "var(--good)" : cd >= 20 ? "var(--acc)" : "var(--bad)"}">${Math.floor(cd)}%</b> <span class="muted">(−${WEAR_H}% в час; ниже 50% работает медленнее, на 0% рушится)</span></p>
+        ${rp ? `<div class="acts"><button class="btn ${canPay({parts: rp}) ? "acc" : ""}" ${canPay({parts: rp}) ? "" : "disabled"} onclick="repairHere()">🔧 Ремонт: ${rp} деталей (есть ${have("parts")})</button></div>` : ""}`; }
+    openModal(`<h3>${B.i} ${B.n} · ${lv ? "ур. " + lv : "строится"}${building && lv ? " → " + c.b.lv : ""}</h3><p class="muted">${B.d}${boost > 1 && B.g !== "hq" ? ` · <span style="color:var(--good)">штаб: +${Math.round((boost - 1) * 100)}%</span>` : ""}</p>
+      ${building ? `<p>🏗 Стройка: ещё ${Math.ceil((c.b.ready - now) / 60e3)} мин</p>` : ""}${info}
+      ${cost ? `<b>Улучшить до ур. ${next}</b> <span class="muted">(${B_MIN[next]} мин)</span><p>${costTxt(cost)}</p>` : `<p class="muted">Максимальный уровень</p>`}
+      <div class="acts">${B.out ? `<button class="btn acc" ${ready ? "" : "disabled"} onclick="collectBuilding()">Забрать ${ready}</button>` : ""}
+      ${cost ? `<button class="btn ${canPay(cost) && !building ? "acc" : ""}" ${canPay(cost) && !building ? "" : "disabled"} onclick="upgradeBuilding()">Улучшить</button>` : ""}
+      <button class="btn bad" onclick="demolishBuilding()">Снести</button><button class="btn" onclick="closeModal()">Закрыть</button></div>`);
+    document.getElementById("mbox").style.maxHeight = "80vh"; document.getElementById("mbox").style.overflow = "auto";
+  }
+}
+function loadInput(it) {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c || !c.b) return;
+  const n = Math.min(have(it), 20); if (!n) return; pay({[it]: n});
+  const buf = c.b.inb || (c.b.inb = {}); buf[it] = (buf[it] || 0) + n;
+  log(`${BUILD[c.b.t].i} Загружено в бункер: ${ITEMS[it].n} ×${n}`); save(); openBuild();
+}
+function startBuild(t) {
+  const k = key(S.p.i, S.p.j), c = S.cells[k]; const cost = bCost(t, 1);
+  if (!c || !c.o || c.b || !canPay(cost) || (t === "hq" && hqCell())) return; closeModal();
+  startBusy("Закладываем фундамент…", 6, 8, () => {
+    if (!canPay(cost) || c.b || (t === "hq" && hqCell())) return; pay(cost);
+    const now = Date.now(), dur = bMinMs(1); c.b = {t, lv: 1, ready: now + dur, y: now + dur, dur};
+    log(`🏗 Стройка начата: ${BUILD[t].n} (${B_MIN[1]} мин)`, "a"); gainXp(t === "hq" ? 20 : 5);
+  });
+}
+function upgradeBuilding() {
+  const k = key(S.p.i, S.p.j), c = S.cells[k]; if (!c || !c.b || c.b.lv >= B_MAX || Date.now() < c.b.ready) return;
+  const next = c.b.lv + 1, cost = bCost(c.b.t, next); if (!canPay(cost)) return; closeModal();
+  startBusy("Подготовка к улучшению…", 6, 8, () => {
+    if (!canPay(cost)) return; pay(cost); collectBuilding(true);
+    const now = Date.now(); c.b.lv = next; c.b.dur = bMinMs(next); c.b.ready = now + c.b.dur; c.b.y = c.b.ready; c.b.nt = 0;
+    log(`🏗 Улучшение: ${BUILD[c.b.t].n} → ур. ${next} (${B_MIN[next]} мин)`, "a"); gainXp(5 * next);
+  });
+}
+function collectBuilding(silent) {
+  const k = key(S.p.i, S.p.j), c = S.cells[k]; if (!c || !c.b) return;
+  const B = BUILD[c.b.t]; let got = 0, left = false;
+  if (B.g === "proc") {
+    const n = c.b.st || 0; got = addItem(B.out, n); c.b.st = n - got; left = c.b.st > 0;
+  } else if (B.g === "raw") {
+    const per = bPerTick(k); let ticks = bTicks(k);
+    if (ticks && per) {
+      const now = Date.now(), ev = bEvery(k), full = Math.floor((now - c.b.y) / ev);
+      if (full > ticks) c.b.y = now - ticks * ev;   // лишнее сверх лимита хранения пропало
+      while (ticks > 0) { const g = addItem(B.out, per); got += g; if (g < per) { if (g) { dec(B.out, g); got -= g; } break; } ticks--; c.b.y += ev; }
+      left = ticks > 0;
+    }
+  }
+  if (!silent) { log(got ? `${B.i} ${B.n}: забрано ${ITEMS[B.out].n} ×${got}` : "Рюкзак полон", got ? "g" : "b"); if (left) toast("Рюкзак полон: часть осталась"); closeModal(); renderAll(); save(); }
+}
+function demolishBuilding() {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c || !c.b) return;
+  if (!c.b.sure) { c.b.sure = 1; toast("Нажмите «Снести» ещё раз: вернётся половина деталей"); setTimeout(() => { if (c.b) delete c.b.sure; }, 4000); return; }
+  const back = Math.floor((BUILD[c.b.t].cost.parts || 0) * c.b.lv / 2); const g = addItem("parts", back);
+  if (g < back) S.stash.parts = (S.stash.parts || 0) + back - g;
+  for (const [it, n] of Object.entries(c.b.inb || {})) if (n > 0) S.stash[it] = (S.stash[it] || 0) + n;   // сырьё из бункера — на склад
+  log(`Снесено: ${BUILD[c.b.t].n}, возвращено деталей: ${back}`, "a"); delete c.b; closeModal(); renderAll(); save();
+}
+function buildTick(now) {  // цеха + уведомления о готовых стройках
+  for (const k in S.cells) { const c = S.cells[k]; if (!c.b) continue;
+    if (BUILD[c.b.t].g === "proc") procTick(k, now);
+    if (c.b.nt && now >= c.b.ready && bCond(c, now) <= 0) { const [i, j] = kij(k); log(`💥 ${BUILD[c.b.t].n} развалился(ась) без ремонта · ${cellBase(i, j).n}`, "b"); toast("Постройка развалилась"); delete c.b; dirty = true; continue; }
+    if (c.b.nt || now < c.b.ready) continue;
+    c.b.nt = 1; c.b.w = c.b.ready; c.b.wh = 100; const [i, j] = kij(k);
+    if (c.b.t === "tower") reveal(i, j, 2 + c.b.lv, true);
+    log(`✔ Построено: ${BUILD[c.b.t].i} ${BUILD[c.b.t].n} ур. ${c.b.lv} · ${cellBase(i, j).n}`, "g"); toast(`Построено: ${BUILD[c.b.t].n}`); dirty = true; }
+}
+/* ===== ЭТАП 2: спецздания, охрана, события по постройкам, тайники, ядра «Тұмар» ===== */
+const SPEC_R = 3;
+function specNear(t, i, j, r = SPEC_R) {   // лучший уровень рабочей спецпостройки рядом
+  let lv = 0; for (const k in S.cells) { const c = S.cells[k]; if (!c.b || c.b.t !== t || !bWorking(c)) continue;
+    const [a, b] = kij(k); if (cheb(a, b, i, j) <= r) lv = Math.max(lv, c.b.lv); } return lv;
+}
+function specBest(t) { let lv = 0; for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === t && bWorking(c)) lv = Math.max(lv, c.b.lv); } return lv; }
+const coreLv = id => (S.cores || {})[id] || 0;
+const bMinMs = lv => B_MIN[lv] * 60e3 * (1 - .15 * coreLv("build"));
+function hurtBuilding(c, dmg, now = Date.now()) { c.b.wh = Math.max(0, bCond(c, now) - dmg); c.b.w = now; }
+
+/* ----- охрана ----- */
+const UNITS = {
+  dog:     {n:"Сторожевые собаки", i:"🐕", str:6,  lv:1, cost:{money:8, can:1}},
+  militia: {n:"Ополченцы",         i:"🛡", str:22, lv:2, cost:{money:25, ammo:5}},
+  veteran: {n:"Ветераны",          i:"🎖", str:55, lv:3, cost:{money:60, ammo:12}},
+};
+const gStr = g => Object.entries(g || {}).reduce((a, [u, n]) => a + UNITS[u].str * n, 0);
+const gCount = g => Object.values(g || {}).reduce((a, n) => a + n, 0);
+const unitsTxt = g => Object.entries(g || {}).filter(([, n]) => n > 0).map(([u, n]) => UNITS[u].i + n).join(" ") || "нет";
+function hireUnit(u) {
+  const U = UNITS[u], c = S.cells[key(S.p.i, S.p.j)];
+  if (!c || !c.b || c.b.t !== "barracks" || bLv(c) < U.lv || !canPay(U.cost)) return;
+  pay(U.cost); (S.reserve = S.reserve || {})[u] = (S.reserve[u] || 0) + 1; log(`⛺ Нанят: ${U.n}`, "g"); save(); openBuild();
+}
+function openGuard() {
+  const k = key(S.p.i, S.p.j), c = S.cells[k]; if (!c || !c.o) return; const g = c.g || {}, r = S.reserve || {};
+  const rows = Object.entries(UNITS).map(([u, U]) => `<div class="row"><div class="n">${U.i} ${U.n} · сила ${U.str}<small>здесь ${g[u] || 0} · в резерве ${r[u] || 0}</small></div><button class="btn mini acc" ${r[u] ? "" : "disabled"} onclick="moveUnit('${u}',1)">Поставить</button><button class="btn mini" ${g[u] ? "" : "disabled"} onclick="moveUnit('${u}',0)">Снять</button></div>`).join("");
+  openModal(`<h3>🛡 Охрана клетки</h3><p class="muted">Сила гарнизона: <b>${gStr(g)}</b>. При набеге сила охраны сравнивается с силой банды (10–110: больше у вражеских зон и ночью). Победа отбивает набег, но кто-то может погибнуть. Поражение — охрана гибнет. Нанимать бойцов можно в ⛺ Казарме, там они попадают в резерв.</p>${rows}<div class="acts"><button class="btn" onclick="closeModal();renderAll()">Готово</button></div>`);
+}
+function moveUnit(u, put) {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c) return; const r = S.reserve = S.reserve || {}, g = c.g = c.g || {};
+  if (put && r[u]) { r[u]--; g[u] = (g[u] || 0) + 1; } else if (!put && g[u]) { g[u]--; r[u] = (r[u] || 0) + 1; }
+  save(); openGuard();
+}
+function garrisonFight(c, i, j) {   // true — набег отбит
+  const G = gStr(c.g); if (!G) return false;
+  const h = new Date().getHours(), raid = rnd(10, 40) + (zoneOf[j * GW + i] >= 0 ? 40 : 0) + (h >= 21 || h < 6 ? 20 : 0);
+  if (G * (.7 + Math.random() * .6) >= raid) {
+    const lost = []; for (const u in c.g) for (let n = c.g[u]; n > 0; n--) if (Math.random() < .15) { c.g[u]--; lost.push(UNITS[u].i); }
+    log(`🛡 Охрана отбила набег (банда ${raid} против ${G}) · ${cellBase(i, j).n}${lost.length ? " · погибли: " + lost.join("") : ""}`, "g"); return true;
+  }
+  log(`🛡 Охрана не выстояла (банда ${raid} против ${G}) · ${cellBase(i, j).n}: гарнизон погиб`, "b"); c.g = {}; return false;
+}
+
+/* ----- события по постройкам ----- */
+let lastBev = Date.now();
+function bldEventTick(now) {
+  if (now - lastBev < 3 * 60e3) return; lastBev = now;
+  const all = Object.keys(S.cells).filter(k => bWorking(S.cells[k], now)); if (all.length < 2 || Math.random() > .25) return;
+  const t = pick(["fire", "fire", "strike", "quake"]);
+  if (t === "fire") {
+    const pool = all.filter(k => ["proc", "raw"].includes(BUILD[S.cells[k].b.t].g)); if (!pool.length) return;
+    const k = pick(pool), c = S.cells[k], [i, j] = kij(k), fp = specNear("firepost", i, j);
+    if (Math.random() < .3 * fp) { log(`🚒 Пожар на «${BUILD[c.b.t].n}» потушен пожарным постом`, "g"); return; }
+    hurtBuilding(c, rnd(25, 40), now); if (BUILD[c.b.t].g === "proc") c.b.st = 0; else c.b.y = now;
+    log(`🔥 Пожар: ${BUILD[c.b.t].n} (${cellBase(i, j).n}) — продукция сгорела, состояние ${Math.floor(bCond(c))}%`, "b"); toast("🔥 Пожар на постройке");
+  } else if (t === "strike") {
+    const pool = all.filter(k => ["gen", "tower", "hq", "turret", "works", "scanlab", "jammer"].includes(S.cells[k].b.t)); if (!pool.length) return;
+    const k = pick(pool), c = S.cells[k], [i, j] = kij(k), jm = specNear("jammer", i, j);
+    if (Math.random() < .3 * jm) { log(`📶 Глушилка сбила дроны ИИ над «${BUILD[c.b.t].n}»`, "g"); return; }
+    hurtBuilding(c, rnd(30, 45), now); log(`🛸 Удар дронов ИИ по «${BUILD[c.b.t].n}» (${cellBase(i, j).n}): состояние ${Math.floor(bCond(c))}%`, "b"); toast("🛸 Дроны ударили по постройке");
+  } else quakeBuildings(kij(pick(all)), now);
+  dirty = true; save();
+}
+function quakeBuildings([ci, cj], now = Date.now()) {
+  let n = 0; for (const k in S.cells) { const c = S.cells[k]; if (!bWorking(c, now)) continue; const [i, j] = kij(k); if (cheb(i, j, ci, cj) > 3) continue;
+    hurtBuilding(c, Math.round(rnd(15, 30) * (1 - .3 * specNear("seismo", i, j))), now); n++; }
+  if (n) { log(`⚡ Толчок у ${cellBase(ci, cj).n}: повреждено построек — ${n}`, "b"); toast("⚡ Толчок: постройки повреждены"); }
+}
+
+/* ----- тайники с ломом и переработка ----- */
+const JUNK = [["cable", 25], ["tires", 20], ["boards", 18], ["coins", 22], ["watch", 6], ["ring", 1], ["parts", 10], ["batt", 6]];
+const RECYCLE = {cable: {parts: 2}, tires: {parts: 3}, boards: {batt: 2}, watch: {parts: 1, batt: 1}};
+function cacheTick(now) {
+  S.caches = (S.caches || []).filter(c => now < c.until);
+  if (S.caches.length >= 3 || Math.random() > .08) return;
+  const c = randCellAt(3, 7, (a, b) => !safeCell(a, b) && !nearCamp(a, b)); if (!c) return;
+  S.caches.push({i: c[0], j: c[1], until: now + 60 * 60e3}); dirty = true;
+}
+function cacheOnEnter(i, j) {
+  const x = (S.caches || []).findIndex(c => c.i === i && c.j === j); if (x < 0) return;
+  S.caches.splice(x, 1); const got = {}, tot = JUNK.reduce((a, [, w]) => a + w, 0);
+  for (let n = rnd(2, 3) + coreLv("loot"); n > 0; n--) { let r = Math.random() * tot, it = JUNK[0][0]; for (const [k, w] of JUNK) { if ((r -= w) < 0) { it = k; break; } }
+    const g = addItem(it, it === "coins" ? rnd(2, 5) : 1); if (g) got[it] = (got[it] || 0) + g; }
+  const txt = Object.entries(got).map(([k, n]) => ITEMS[k].n + (n > 1 ? " ×" + n : "")).join(", ");
+  log("🧰 Тайник вскрыт: " + (txt || "рюкзак полон"), txt ? "g" : "b"); gainXp(3);
+}
+function recycle(it) {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c || !c.b || c.b.t !== "recycler" || !S.inv[it] || !RECYCLE[it]) return;
+  const m = 1 + .25 * (bLv(c) - 1) + .15 * coreLv("synth"); dec(it);
+  const out = Object.entries(RECYCLE[it]).map(([k, n]) => { const q = Math.max(1, Math.round(n * m)); const g = addItem(k, q); if (g < q) S.stash[k] = (S.stash[k] || 0) + q - g; return ITEMS[k].n + " ×" + q; });
+  log(`♻ ${ITEMS[it].n} → ${out.join(", ")}`, "g"); save(); openBuild();
+}
+
+/* ----- ядра «Тұмар» (аналог артефактов): пеленг, сужение зоны ходьбой, вскрытие ----- */
+const CORES = {
+  build:  {n:"Ядро Логистики", d:"стройка быстрее на 15% за уровень"},
+  harvest:{n:"Ядро Жатвы",     d:"добывающие постройки +10% за уровень"},
+  synth:  {n:"Ядро Синтеза",   d:"цеха +15%, переработка лома +15% за уровень"},
+  sight:  {n:"Ядро Зрения",    d:"радиус сканера +1 за уровень"},
+  shield: {n:"Ядро Щита",      d:"+10% шанс отбить любой набег за уровень"},
+  repair: {n:"Ядро Ремонта",   d:"износ построек −20% за уровень"},
+  loot:   {n:"Ядро Хабара",    d:"+1 находка в тайниках за уровень"},
+};
+const BANDS = [[0, 0, "ЗДЕСЬ"], [1, 2, "очень близко"], [3, 5, "близко"], [6, 9, "средне"], [10, 99, "далеко"]];
+const DIRS = ["С", "СВ", "В", "ЮВ", "Ю", "ЮЗ", "З", "СЗ"];
+function huntPing() {
+  const now = Date.now();
+  if (!S.hunt && now < (S.huntNext || 0)) { toast("Детектор перезаряжается: " + Math.ceil((S.huntNext - now) / 60e3) + " мин"); return; }
+  startBusy("Пеленг сигнала ИИ…", 4, 4, () => {
+    if (!S.hunt) { const c = randCellAt(6, 12, (a, b) => !safeCell(a, b)); if (!c) { toast("Сигнала нет"); return; }
+      S.hunt = {i: c[0], j: c[1], until: Date.now() + 2 * 3600e3, pings: []}; log("🧿 Пойман сигнал ядра «Тұмар». Ходите и пеленгуйте, чтобы сузить зону поиска.", "a"); }
+    const h = S.hunt, d = cheb(h.i, h.j, S.p.i, S.p.j), band = BANDS.findIndex(b => d >= b[0] && d <= b[1]);
+    const ang = Math.atan2(h.j - S.p.j, h.i - S.p.i), dir = DIRS[(Math.round((Math.PI / 2 - ang) / (Math.PI / 4)) % 8 + 8) % 8];
+    h.pings.push({i: S.p.i, j: S.p.j, b: band}); if (h.pings.length > 6) h.pings.shift();
+    if (band === 0) { if (!h.found) { h.found = Date.now(); for (let n = 0; n < 2; n++) { const e = spawnEnt("drone", S.p.i + pick([-1, 1]), S.p.j + rnd(-1, 1)); e.aggro = true; } }
+      log("🧿 Ядро прямо под вами! 15 минут на вскрытие. Охранные дроны проснулись.", "b"); toast("🧿 Ядро найдено!"); }
+    else log(`🧿 Сигнал: ${BANDS[band][2]}${band >= 2 ? ", примерно " + dir : ""}`, "a");
+  });
+}
+function huntOpen() {
+  const h = S.hunt; if (!h || !h.found || h.i !== S.p.i || h.j !== S.p.j) return;
+  startBusy("Вскрытие ядра…", 20, 10, () => {
+    let ch = .55; const emp = (S.inv.emp || 0) > 0; if (emp) { dec("emp"); ch += .35; }
+    if (Math.random() < ch) { const id = pick(Object.keys(CORES)); S.cores = S.cores || {}; const up = coreLv(id) < 3; if (up) S.cores[id] = coreLv(id) + 1; else S.money += 80;
+      log(`✨ Добыто: ${CORES[id].n}${up ? " ур. " + S.cores[id] + " — " + CORES[id].d : " (уже максимум, продано за 80 💰)"}`, "g"); toast("✨ " + CORES[id].n); gainXp(40);
+      S.hunt = null; S.huntNext = Date.now() + 20 * 60e3; }
+    else log(`🧿 Защита ядра не поддалась${emp ? " даже ЭМИ" : " (ЭМИ-граната даёт +35%)"}. Можно пробовать ещё, пока не истекло время.`, "b");
+  });
+}
+function huntTick(now) {
+  const h = S.hunt; if (!h) return;
+  if (h.found && now > h.found + 15 * 60e3 || now > h.until) { log("🧿 Сигнал ядра пропал — ИИ увёл его в сеть", "b"); S.hunt = null; S.huntNext = now + 10 * 60e3; dirty = true; }
+}
+function incomeOf(k, now) {
+  const c = S.cells[k]; if (!c || !c.o) return 0;
+  return Math.min(YIELD_CAP, Math.floor((now - (c.oy || c.oc || now)) / YIELD_MS));
+}
+function pendingIncome() { const now = Date.now(); let n = 0; for (const k in S.cells) n += incomeOf(k, now); return n; }
+function collectIncome() {
+  const now = Date.now(); const got = {};
+  for (const k in S.cells) {
+    const u = incomeOf(k, now); if (!u) continue;
+    const [i, j] = k.split(",").map(Number); const t = cellBase(i, j).t; const out = INCOME[t]; const c = S.cells[k];
+    c.oy = Math.max(c.oy || c.oc, now - YIELD_CAP * YIELD_MS) + u * YIELD_MS;
+    if (!out) continue;
+    const mult = ((S.dist || {})[distOf[j * GW + i]] ? 1.5 : 1) * (microFree(microOf[j * GW + i]) ? 2 : 1);
+    let n = Math.round(u * mult); while (n-- > 0) { const it = pick(out); got[it] = (got[it] || 0) + 1; }
+  }
+  for (const it in got) S.stash[it] = (S.stash[it] || 0) + got[it];
+  const txt = Object.entries(got).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ");
+  log(txt ? "Доход на склад: " + txt : "Дохода пока нет", txt ? "g" : ""); renderAll(); save();
+}
+function openStash() {
+  const inv = Object.entries(S.inv).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}</div><button class="btn mini" onclick="moveStash('${k}',1,1)">→ 1</button><button class="btn mini" onclick="moveStash('${k}',1,${n})">→ все</button></div>`).join("");
+  const st = Object.entries(S.stash).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}</div><button class="btn mini" onclick="moveStash('${k}',0,1)">← 1</button><button class="btn mini" onclick="moveStash('${k}',0,${n})">← все</button></div>`).join("");
+  openModal(`<h3>📦 Склад убежища</h3><p class="muted">Рюкзак ${weight().toFixed(1)}/${maxW()} кг. Склад без лимита и не теряется при смерти.</p>
+   <b>Рюкзак → склад</b>${inv || '<p class="muted">пусто</p>'}<b style="display:block;margin-top:8px">Склад → рюкзак</b>${st || '<p class="muted">пусто</p>'}
+   <div class="acts"><button class="btn acc" onclick="closeModal();renderAll()">Готово</button></div>`);
+  document.getElementById("mbox").style.maxHeight = "80vh"; document.getElementById("mbox").style.overflow = "auto";
+}
+function moveStash(k, toStash, n) {
+  if (toStash) { n = Math.min(n, S.inv[k] || 0); dec(k, n); S.stash[k] = (S.stash[k] || 0) + n; }
+  else { n = Math.min(n, S.stash[k] || 0); const g = addItem(k, n); S.stash[k] -= g; if (S.stash[k] <= 0) delete S.stash[k]; if (g < n) toast("Рюкзак полон"); }
+  save(); openStash();
+}
+const recipeOk = r => Object.entries(r.need).every(([k, n]) => (S.inv[k] || 0) >= n);
+function openBench() {
+  const rows = RECIPES.map(r => `<div class="row"><div class="n">${ITEMS[r.out[0]].n}${r.out[1] > 1 ? " ×" + r.out[1] : ""}<small>${Object.entries(r.need).map(([k, n]) => ITEMS[k].n + " " + (S.inv[k] || 0) + "/" + n).join(" · ")}</small></div><button class="btn mini ${recipeOk(r) ? "acc" : ""}" ${recipeOk(r) ? "" : "disabled"} onclick="craft('${r.id}')">Собрать</button></div>`).join("");
+  openModal(`<h3>🔧 Верстак</h3><p class="muted">Используются предметы из рюкзака.</p>${rows}<div class="acts"><button class="btn" onclick="closeModal();renderAll()">Закрыть</button></div>`);
+}
+function craft(id) {
+  const r = RECIPES.find(x => x.id === id); if (!r || !recipeOk(r)) return;
+  for (const [k, n] of Object.entries(r.need)) dec(k, n);
+  S.inv[r.out[0]] = (S.inv[r.out[0]] || 0) + r.out[1]; log("Собрано: " + ITEMS[r.out[0]].n + (r.out[1] > 1 ? " ×" + r.out[1] : ""), "g"); gainXp(2); save(); openBench();
+}
+function openPerks() {
+  const avail = Object.keys(PERKS).filter(k => pk(k) < PERKS[k].max);
+  const opts = avail.sort(() => Math.random() - .5).slice(0, 3);
+  if (!opts.length) { S.pendingPerks = 0; return; }
+  openModal(`<h3>★ Уровень ${S.lvl}</h3><p class="muted">Выберите навык</p><div class="acts">${opts.map(k => `<button class="btn acc" onclick="takePerk('${k}')">${PERKS[k].n} ${pk(k) ? "(" + (pk(k) + 1) + ")" : ""}<small>${PERKS[k].d}</small></button>`).join("")}</div>`);
+}
+function takePerk(k) { S.perks[k] = pk(k) + 1; S.pendingPerks--; log("Навык: " + PERKS[k].n + " " + S.perks[k], "g"); closeModal(); renderAll(); save(); }
+/* ===== ЗАДАНИЯ ===== */
+const NPC = ["Айгерим","дядя Серик","студенты КазНУ","медсестра Алия","старик Болат","таксист Марат","Жанна с ребёнком","сторож Ерлан"];
+function randCellAt(d0, d1, okFn) {
+  for (let t = 0; t < 60; t++) {
+    const a = S.p.i + rnd(-d1, d1), b = S.p.j + rnd(-d1, d1);
+    if (!inGrid(a, b) || !inCity[b * GW + a] || cheb(a, b, S.p.i, S.p.j) < d0) continue;
+    if (okFn && !okFn(a, b)) continue; return [a, b];
+  }
+  return null;
+}
+function genQuest() {
+  const who = pick(NPC), roll = Math.random();
+  if (roll < .4) {
+    const it = pick(["water","can","band","medkit","parts","batt","fuel"]); const n = it === "medkit" ? rnd(1, 2) : rnd(2, 4);
+    const c = randCellAt(5, 13, (a, b) => zoneOf[b * GW + a] < 0); if (!c) return null;
+    return {t:"deliver", who, it, n, i:c[0], j:c[1], money: 8 + VAL[it] * n * 2, xp: 25, txt:`${who}: принести ${ITEMS[it].n} ×${n}`};
+  }
+  if (roll < .65) {
+    const zs = POIS.map((p, z) => [p, z]).filter(([p]) => p.f && cheb(p.i, p.j, S.p.i, S.p.j) < 25 && !(S.cells[key(p.i, p.j)] || {}).cleared);
+    if (zs.length) { const [p, z] = zs.sort((a, b) => cheb(a[0].i, a[0].j, S.p.i, S.p.j) - cheb(b[0].i, b[0].j, S.p.i, S.p.j))[rnd(0, Math.min(2, zs.length - 1))];
+      return {t:"clear", who, z, i:p.i, j:p.j, money: p.t === "hideout" ? 35 : 60, xp: 60, txt:`${who}: зачистить «${p.n}»`}; }
+  }
+  if (roll < .85) {
+    const c = randCellAt(8, 16); if (!c) return null;
+    return {t:"scout", who, i:c[0], j:c[1], money: 15, xp: 20, txt:`${who}: проверить квартал (${DISTRICTS[distOf[c[1] * GW + c[0]]].n})`};
+  }
+  const d = distOf[S.p.j * GW + S.p.i];
+  return {t:"capture", who, d, need: distCount(d) + 3, money: 30, xp: 35, txt:`${who}: удержать ${distCount(d) + 3} клеток в районе ${DISTRICTS[d].n}`};
+}
+function openRadio() {
+  if (Date.now() < S.qNext) { toast("Эфир пуст. Ещё " + Math.ceil((S.qNext - Date.now()) / 60e3) + " мин"); return; }
+  if (S.quests.length >= 3) { toast("Максимум 3 задания"); return; }
+  const offers = [genQuest(), genQuest()].filter(Boolean); radioOffers = offers;
+  openModal(`<h3>📻 Рация</h3><p class="muted">Сквозь помехи — просьбы выживших. Можно взять одно.</p><div class="acts">${offers.map((q, k) =>
+    `<button class="btn acc" onclick="takeQuest(${k})">${q.txt}<small>награда: ${q.money} 💰 · ${q.xp} опыта</small></button>`).join("")}<button class="btn" onclick="closeModal()">Выключить</button></div>`);
+}
+let radioOffers = [];
+function takeQuest(k) { const q = radioOffers[k]; if (!q) return; S.quests.push(q); S.qNext = Date.now() + 3 * 60e3; log("Задание: " + q.txt, "a"); closeModal(); renderAll(); save(); }
+function finishQuest(q) {
+  S.quests = S.quests.filter(x => x !== q); S.money += q.money; gainXp(q.xp);
+  const bonus = pick(["medkit","ammo","can","water","batt","parts"]); const g = addItem(bonus, bonus === "ammo" ? 6 : 1);
+  log(`✔ Выполнено: ${q.txt}. +${q.money} 💰` + (g ? ", " + ITEMS[bonus].n : ""), "g"); toast("Задание выполнено"); dirty = true;
+}
+function questsOnEnter(i, j) { for (const q of [...S.quests]) if (q.t === "scout" && q.i === i && q.j === j) finishQuest(q); }
+function questProgress(t, v) {
+  for (const q of [...S.quests]) {
+    if (t === "clear" && q.t === "clear" && q.z === v) finishQuest(q);
+    if (t === "capture" && q.t === "capture" && q.d === v && distCount(v) >= q.need) finishQuest(q);
+  }
+}
+function deliverQuest(k) {
+  const q = S.quests[k]; if (!q || (S.inv[q.it] || 0) < q.n) return; dec(q.it, q.n); finishQuest(q); renderAll(); save();
+}
+function dropQuest(k) { const q = S.quests[k]; S.quests.splice(k, 1); log("Отказ от задания: " + q.txt); renderAll(); save(); }
+
+/* ===== ТОРГОВЕЦ ===== */
+function traderTick(now) {
+  const T = S.trader;
+  if (T && now > T.until) { S.trader = null; S.nextTrader = now + rnd(12, 20) * 60e3; log("Торговец Ержан ушёл из округи"); dirty = true; return; }
+  if (!T && now > S.nextTrader) {
+    const c = randCellAt(3, 7, (a, b) => zoneOf[b * GW + a] < 0); if (!c) { S.nextTrader = now + 60e3; return; }
+    const pool = ["medkit","ammo","emp","vest","pistol","bike","mask","akb","fuel","water","can","molotov","axe"];
+    const stock = {}; pool.sort(() => Math.random() - .5).slice(0, 6).forEach(k => stock[k] = k === "ammo" ? 20 : rnd(1, 3));
+    S.trader = {i: c[0], j: c[1], until: now + 15 * 60e3, mv: now + 30e3, stock};
+    log("📻 «Это Ержан, торгую неподалёку. Ищите верблюда!» (" + DISTRICTS[distOf[c[1] * GW + c[0]]].n + ")", "a"); dirty = true; return;
+  }
+  if (T && now > T.mv && !(T.i === S.p.i && T.j === S.p.j)) {
+    T.mv = now + 30e3; const a = T.i + rnd(-1, 1), b = T.j + rnd(-1, 1);
+    if (inGrid(a, b) && inCity[b * GW + a] && zoneOf[b * GW + a] < 0) { T.i = a; T.j = b; dirty = true; }
+  }
+}
+function openTrade() {
+  const T = S.trader; if (!T) return;
+  const buy = Object.entries(T.stock).map(([k, n]) => { const pr = VAL[k] * 2 * (k === "ammo" ? 1 : 1);
+    return `<div class="row"><div class="n">${ITEMS[k].n} ×${n}<small>${pr} 💰${k === "ammo" ? " за шт." : ""}</small></div><button class="btn mini acc" ${S.money >= pr ? "" : "disabled"} onclick="tradeBuy('${k}')">Купить</button></div>`; }).join("");
+  const sell = Object.entries(S.inv).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}<small>${VAL[k]} 💰</small></div><button class="btn mini" onclick="tradeSell('${k}')">Продать</button></div>`).join("");
+  openModal(`<h3>🐪 Торговец Ержан</h3><p class="muted">У вас ${S.money} 💰 · уйдёт через ${Math.ceil((T.until - Date.now()) / 60e3)} мин</p><b>Купить</b>${buy || '<p class="muted">всё распродано</p>'}<b style="display:block;margin-top:8px">Продать</b>${sell || '<p class="muted">рюкзак пуст</p>'}<div class="acts"><button class="btn" onclick="closeModal();renderAll()">Уйти</button></div>`);
+}
+function tradeBuy(k) { const T = S.trader; const pr = VAL[k] * 2; if (!T || !T.stock[k] || S.money < pr) return;
+  if (!addItem(k, 1)) { toast("Рюкзак полон"); return; } S.money -= pr; if (--T.stock[k] <= 0) delete T.stock[k]; save(); openTrade(); }
+function tradeSell(k) { if (!S.inv[k]) return; dec(k); S.money += VAL[k]; save(); openTrade(); }
+
+/* ===== ТРАНСПОРТ ===== */
+function mountBike() { if (!S.inv.bike || S.vehicle === "car") return; dec("bike"); S.vehicle = "bike"; log("Вы на велосипеде: +1 радиус", "g"); renderAll(); save(); }
+function dismount() { if (S.vehicle === "bike") { S.inv.bike = (S.inv.bike || 0) + 1; S.vehicle = null; renderAll(); save(); } }
+function refuel() { if (S.vehicle !== "car" || !S.inv.fuel || S.tank >= 10) return; dec("fuel"); S.tank = Math.min(10, S.tank + 5); log("Заправка: бак " + S.tank + "/10"); renderAll(); save(); }
+function actRepairCar() {
+  if (!(S.inv.akb >= 1 && (S.inv.parts || 0) >= 12 && (S.inv.fuel || 0) >= 1)) return;
+  startBusy("Чиним машину…", 30, 25, () => {
+    dec("akb"); dec("parts", 12); dec("fuel");
+    if (S.vehicle === "bike") S.inv.bike = (S.inv.bike || 0) + 1;
+    S.vehicle = "car"; S.tank = 5; log("🚗 Старая «Нива» на ходу! +3 радиус, без затрат энергии, расход 0.5 бензина/клетка", "g"); gainXp(30);
+  });
+}
+
+/* ===== СОБЫТИЯ ===== */
+const EV = {toxic:"☣ Выброс", quake:"⚡ Афтершок", drones:"🛸 Рой дронов", drop:"📦 Гуманитарный сброс"};
+function eventTick(now) {
+  const E = S.event;
+  if (E && now > E.until) { log(EV[E.t] + " — закончилось"); S.event = null; S.nextEvent = now + rnd(8, 14) * 60e3; dirty = true; }
+  if (!S.event && now > S.nextEvent) startEvent(now);
+  const e = S.event; if (!e) return;
+  if (e.t === "toxic" && cheb(e.i, e.j, S.p.i, S.p.j) <= e.r && !S.inv.mask && now > (e.hit || 0) && !fight) {
+    e.hit = now + 5000; const d = hurt(3); if (S.p.hp > 0) toast("☣ Токсичный воздух −" + d + " HP");
+  }
+}
+function startEvent(now) {
+  const t = pick(["toxic","toxic","quake","drones","drop","drop"]);
+  if (t === "toxic") {
+    const src = POIS.filter(p => (p.t === "power" || p.t === "tower" || p.t === "military") && cheb(p.i, p.j, S.p.i, S.p.j) < 14);
+    const c = src.length ? [pick(src).i, pick(src).j] : randCellAt(2, 6); const p = src.length ? pick(src) : null;
+    S.event = {t, i: p ? p.i : c[0], j: p ? p.j : c[1], r: 4, until: now + 4 * 60e3};
+    log("☣ Выброс" + (p ? " с объекта «" + p.n + "»" : "") + "! Без противогаза держитесь подальше (4 кл.)", "b");
+  } else if (t === "quake") {
+    S.event = {t, until: now + 60e3};
+    const c = S.cells[key(S.p.i, S.p.j)] || {};
+    if (!(c.o && c.f)) { const d = hurt(rnd(5, 14)); log("⚡ Афтершок! Обломки −" + d + " HP", "b"); } else log("⚡ Афтершок! Баррикады выдержали", "a");
+    for (let dj = -6; dj <= 6; dj++) for (let di = -6; di <= 6; di++) { const cc = S.cells[key(S.p.i + di, S.p.j + dj)]; if (cc) cc.lc = 0; }
+    log("Завалы вскрыли новые тайники — лут поблизости обновлён", "a"); quakeBuildings([S.p.i, S.p.j], now);
+  } else if (t === "drones") {
+    S.event = {t, until: now + 2 * 60e3};
+    for (let n = 0; n < 3; n++) { const c = randCellAt(3, 5); if (c) { const e = spawnEnt("drone", c[0], c[1]); e.aggro = true; e.roam = true; } }
+    log("🛸 ИИ выслал рой дронов в ваш квадрат!", "b");
+  } else {
+    const c = randCellAt(4, 8); if (!c) { S.nextEvent = now + 60e3; return; }
+    S.event = {t, i: c[0], j: c[1], until: now + 10 * 60e3};
+    for (let n = 0; n < 2; n++) { const e = spawnEnt("bandit", c[0] + rnd(-2, 2), c[1] + rnd(-2, 2), c); e.roam = false; }
+    log("📦 Гуманитарный сброс в " + cheb(c[0], c[1], S.p.i, S.p.j) + " кл. от вас! Мародёры тоже его видели", "a");
+  }
+  toast(EV[t]); dirty = true;
+}
+function dropOnEnter(i, j) {
+  const e = S.event; if (!e || e.t !== "drop" || e.i !== i || e.j !== j) return;
+  const got = [];
+  for (const [k, n] of [["medkit",1],["ammo",10],["can",3],["water",3],[pick(["emp","vest","mask","pistol"]),1]]) { const g = addItem(k, n); if (g) got.push(ITEMS[k].n + (g > 1 ? " ×" + g : "")); }
+  S.money += 20; gainXp(15);
+  log("📦 Сброс вскрыт: " + got.join(", ") + ", +20 💰", "g"); S.event = null; S.nextEvent = Date.now() + rnd(8, 14) * 60e3;
+}
+
+/* ===== МИКРОРАЙОН И СЮЖЕТ «ТАСТАК-2» ===== */
+function microCount(m) { let n = 0; for (const k in S.cells) { if (!S.cells[k].o) continue; const [i, j] = k.split(",").map(Number); if (microOf[j * GW + i] === m) n++; } return n; }
+const microPct = m => Math.round(microCount(m) / MICRO[m].total * 100);
+const microFree = m => m === 0 && (S.story || {}).t2 >= 6;
+const T2 = () => ({camp: POI_BY("t2camp"), market: POI_BY("t2market"), mz: POIS.indexOf(POI_BY("t2market"))});
+const STORY = [null,
+  {txt:"Дойти до лагеря выживших в школе на Тастаке", money:10, xp:10},
+  {txt:"Принести в лагерь 3 воды и 2 бинта", money:20, xp:25},
+  {txt:"Разведать рынок «Тастак» (разведка в 2 кл. от рынка)", money:15, xp:20},
+  {txt:"Убить Смотрящего Тастака на рынке", money:50, xp:60},
+  {txt:"Взять под контроль 60% клеток Тастака-2", money:80, xp:120},
+];
+const STORY_LINES = [null,
+  "📻 «…кто слышит… лагерь в школе на Тастаке, между Тлендиева и Брусиловского. Есть вода и крыша…»",
+  "Старшая лагеря Сауле: «Люди болеют. Нужна чистая вода и бинты — три бутыли и пару бинтов»",
+  "Сауле: «На рынке засели тастакские. Посмотри, сколько их и где Смотрящий»",
+  "Сауле: «Пока Смотрящий жив, они будут грабить дворы. Убери его»",
+  "Сауле: «Рынок свободен. Займи дворы, чтобы шакалы не вернулись — и Тастак снова наш»",
+];
+function storyStart() { if (!S.story) { S.story = {t2: 1}; log(STORY_LINES[1], "a"); } }
+function storyAdvance() {
+  const st = S.story.t2, q = STORY[st]; S.money += q.money; gainXp(q.xp);
+  log(`✔ Сюжет: ${q.txt}. +${q.money} 💰`, "g"); S.story.t2++;
+  if (S.story.t2 >= 6) { log("★ ТАСТАК-2 ОСВОБОЖДЁН! Лагерь стал вашим форпостом: набегов нет, доход микрорайона ×2, лавка лагеря открыта", "g"); toast("★ Тастак-2 освобождён"); gainXp(100); }
+  else { log(STORY_LINES[S.story.t2], "a"); toast("Сюжет: новая цель"); }
+  dirty = true; renderAll(); save();
+}
+function storyCheck(ev, v) {
+  if (!S.story) return; const st = S.story.t2, t = T2();
+  if (st === 1 && ev === "enter" && S.p.i === t.camp.i && S.p.j === t.camp.j) storyAdvance();
+  else if (st === 3 && ev === "scout" && cheb(S.p.i, S.p.j, t.market.i, t.market.j) <= SCAN_R) storyAdvance();
+  else if (st === 4 && ev === "kill" && v === t.mz) storyAdvance();
+  else if (st === 5 && (ev === "capture" || ev === "enter") && microPct(0) >= 60) storyAdvance();
+}
+function storyTarget() { const st = (S.story || {}).t2, t = T2(); if (!st || st >= 6) return null;
+  return st === 1 || st === 2 ? t.camp : st === 3 || st === 4 ? t.market : null; }
+function openCamp() {
+  const st = (S.story || {}).t2 || 0, t = T2();
+  const canGive = st === 2 && (S.inv.water || 0) >= 3 && (S.inv.band || 0) >= 2;
+  const shop = st >= 3 ? [["water",6],["can",8],["band",6],["ammo",3],["rusk",4]] : [];
+  openModal(`<h3>🏫 Лагерь выживших</h3><p class="muted">Школа на Тастаке. Здесь безопасно: враги сюда не заходят.${st >= 6 ? " Форпост освобождённого Тастака-2." : ""}</p>
+   ${st >= 1 && st < 6 ? `<p><b>Цель:</b> ${STORY[st].txt}</p>` : ""}
+   <div class="acts">
+    ${st === 2 ? `<button class="btn acc" ${canGive ? "" : "disabled"} onclick="campGive()">🤝 Отдать 3 воды и 2 бинта<small>есть: вода ${S.inv.water || 0}, бинты ${S.inv.band || 0}</small></button>` : ""}
+    <button class="btn" ${(S.inv.can || 0) >= 1 && S.p.hp < 100 ? "" : "disabled"} onclick="campHeal()">💉 Медсестра: +35 HP<small>плата: 1 консервы</small></button>
+   </div>
+   ${shop.length ? `<b style="display:block;margin-top:10px">Лавка лагеря · у вас ${S.money} 💰</b>` + shop.map(([k, pr]) => `<div class="row"><div class="n">${ITEMS[k].n}<small>${pr} 💰</small></div><button class="btn mini acc" ${S.money >= pr ? "" : "disabled"} onclick="campBuy('${k}',${pr})">Купить</button></div>`).join("") : `<p class="muted">Лавка откроется, когда лагерь встанет на ноги.</p>`}
+   <div class="acts"><button class="btn" onclick="closeModal();renderAll()">Уйти</button></div>`);
+}
+function campGive() { if ((S.inv.water || 0) < 3 || (S.inv.band || 0) < 2) return; dec("water", 3); dec("band", 2); closeModal(); storyAdvance(); }
+function campHeal() { if (!S.inv.can) return; dec("can"); S.p.hp = Math.min(100, S.p.hp + 35); log("Медсестра перевязала раны: +35 HP", "g"); save(); openCamp(); }
+function campBuy(k, pr) { if (S.money < pr) return; if (!addItem(k, k === "ammo" ? 1 : 1)) { toast("Рюкзак полон"); return; } S.money -= pr; save(); openCamp(); }
+function actRoof() {
+  startBusy("Подъём на крышу высотки…", 10, 10, () => { reveal(S.p.i, S.p.j, 5, true); log("🔭 С крыши видно весь Тастак: территория в радиусе 5 кл. разведана", "a"); gainXp(3); storyCheck("scout"); });
+}
+function actTunnel() {
+  const p = POIS[poiAt.get(key(S.p.i, S.p.j))]; const to = POI_BY(p.link); if (!to) return;
+  startBusy("Идём по тоннелю до «" + to.n.replace("Метро ", "") + "»…", 20, 10, () => {
+    S.p.i = to.i; S.p.j = to.j; log("🚇 Вы вышли на станции " + to.n, "a"); centerOnPlayer(); enterCell(to.i, to.j);
+    if (Math.random() < .2) { log("В вестибюле кто-то есть!", "b"); spawnNear("ambush"); }
+  });
+}
+function actLake() {
+  const c = C(key(S.p.i, S.p.j)); if (c.wl && Date.now() - c.wl < 5 * 60e3) return;
+  startBusy("Набираем воду из озера…", 6, 4, () => {
+    c.wl = Date.now(); const g = addItem("water", 2); log("Набрали воды из Сайрана: +" + g, "g");
+    if (Math.random() < .25) { const d = hurt(6); log("Вода оказалась грязной: −" + d + " HP", "b"); }
+  });
+}
+
+function distCount(d) { let n = 0; for (const k in S.cells) { if (!S.cells[k].o) continue; const [i, j] = k.split(",").map(Number); if (distOf[j * GW + i] === d) n++; } return n; }
+function distPct(d) { return Math.round(distCount(d) / DISTRICTS[d].total * 1000) / 10; }
+
+/* ----- враги ----- */
+function spawnEnt(type, i, j, home) {
+  const e = {id: entId++, type, i, j, hp: ENEMY[type].hp, hi: home ? home[0] : i, hj: home ? home[1] : j, next: Date.now() + 1500 + Math.random() * 3000, ox: (Math.random() - .5) * .4, oy: (Math.random() - .5) * .4, zone: -1};
+  ents.push(e); return e;
+}
+function spawnNear(kind) {
+  // засада: рядом появляется враг по фракции зоны
+  const z = zoneFaction(S.p.i, S.p.j);
+  const type = z === "ai" ? "drone" : (Math.random() < .3 ? "thug" : "bandit");
+  for (let t = 0; t < 10; t++) {
+    const a = S.p.i + rnd(-2, 2), b = S.p.j + rnd(-2, 2);
+    if (inGrid(a, b) && inCity[b * GW + a] && cheb(a, b, S.p.i, S.p.j) >= 1 && !nearCamp(a, b)) { const e = spawnEnt(type, a, b); e.aggro = true; log("Вас заметили: " + ENEMY[type].n + "!", "b"); return; }
+  }
+}
+let lastPop = 0;
+function populate() {
+  const now = Date.now(); if (now - lastPop < 4000) return; lastPop = now;
+  // удалить далёких
+  ents = ents.filter(e => cheb(e.i, e.j, S.p.i, S.p.j) <= 16 && !(nearCamp(e.i, e.j) && !e.guard && !(fight && fight.e === e)));
+  // гарнизоны зон
+  POIS.forEach((p, z) => {
+    if (!p.f) return; if (cheb(p.i, p.j, S.p.i, S.p.j) > 12) return;
+    const st = S.cells[key(p.i, p.j)] || {};
+    if (st.cleared && now - st.cleared < 30 * 60e3) return;   // центр зачищен — 30 мин тишины
+    if (st.cleared) { delete st.cleared; }
+    const mine = ents.filter(e => e.zone === z);
+    const want = p.t === "hideout" ? 3 : 5;
+    if (!mine.some(e => e.guard)) {
+      const gt = p.f === "ai" ? "turret" : (p.t === "market" ? "boss" : "thug");
+      const g = spawnEnt(gt, p.i, p.j); g.zone = z; g.guard = true; if (gt === "boss") g.name = p.boss;
+    }
+    for (let n = mine.length; n < want; n++) {
+      const a = p.i + rnd(-3, 3), b = p.j + rnd(-3, 3);
+      if (!inGrid(a, b) || !inCity[b * GW + a] || (S.cells[key(a, b)] || {}).o || safeCell(a, b) || nearCamp(a, b)) continue;
+      const e = spawnEnt(p.f === "ai" ? "drone" : (Math.random() < .35 ? "thug" : "bandit"), a, b, [p.i, p.j]); e.zone = z;
+    }
+  });
+  // бродячие мародёры
+  const night = (() => { const h = new Date().getHours(); return h >= 21 || h < 6; })();
+  const roam = ents.filter(e => e.roam).length, wantRoam = night ? 5 : 3;
+  for (let n = roam; n < wantRoam; n++) {
+    const a = S.p.i + rnd(-8, 8), b = S.p.j + rnd(-8, 8);
+    if (!inGrid(a, b) || !inCity[b * GW + a] || cheb(a, b, S.p.i, S.p.j) < 4 || (S.cells[key(a, b)] || {}).o || safeCell(a, b) || nearCamp(a, b)) continue;
+    const e = spawnEnt("bandit", a, b); e.roam = true;
+  }
+}
+function stepEnts() {
+  const now = Date.now(); let moved = false;
+  for (const e of ents) {
+    const T = ENEMY[e.type];
+    if (fight && fight.e === e) continue;
+    if (e.type === "turret" || e.type === "boss") { // стационарные: турель стреляет по соседним клеткам
+      if (e.type === "turret" && !fight && !travel && cheb(e.i, e.j, S.p.i, S.p.j) === 1 && now > (e.shot || 0)) {
+        e.shot = now + 4000; if (Math.random() < .5) { const d = hurt(rnd(5, 9)); log("Турель стреляет! −" + d + " HP", "b"); renderAll(); }
+      }
+      continue;
+    }
+    if (now < e.next) continue;
+    e.next = now + T.step * (.7 + Math.random() * .6);
+    const dist = cheb(e.i, e.j, S.p.i, S.p.j);
+    let ti = e.i, tj = e.j;
+    if ((dist <= 2 || e.aggro) && !travel) { ti += Math.sign(S.p.i - e.i); tj += Math.sign(S.p.j - e.j); e.aggro = dist <= 4; }
+    else if (Math.random() < .6) { ti += rnd(-1, 1); tj += rnd(-1, 1); if (!e.roam && cheb(ti, tj, e.hi, e.hj) > 4) { ti = e.i; tj = e.j; } }
+    if (!inGrid(ti, tj) || !inCity[tj * GW + ti]) continue;
+    const tc = S.cells[key(ti, tj)];
+    if ((tc && tc.f || safeCell(ti, tj)) && !(ti === S.p.i && tj === S.p.j)) continue;
+    if (safeCell(ti, tj)) continue;  // баррикады не пускают
+    if (nearCamp(ti, tj) && !nearCamp(e.i, e.j)) continue;  // патрули лагеря не пускают в зону спокойствия
+    if (ti !== e.i || tj !== e.j) { e.i = ti; e.j = tj; moved = true;
+      if (tc && tc.mt && tc.o) { tc.mt--; e.hp -= 35; log(ENEMY[e.type].n + " подорвался на вашей растяжке", "g");
+        if (e.hp <= 0) { e.dead = true; S.kills++; gainXp(5); } } }
+  }
+  ents = ents.filter(e => !e.dead);
+  if (moved) { dirty = true; checkEncounter(); }
+}
+function checkEncounter() {
+  if (fight || travel || safeCell(S.p.i, S.p.j)) return;
+  const e = ents.find(e => e.i === S.p.i && e.j === S.p.j);
+  if (e) startFight(e);
+}
+
+/* ----- бой ----- */
+function startFight(e) {
+  busy = null; hideProgress(); resting = false;
+  fight = {e, log: []};
+  renderFight();
+}
+function renderFight() {
+  if (!fight) return;
+  const e = fight.e, T = ENEMY[e.type];
+  const hasEmp = (S.inv.emp || 0) > 0 && T.f === "ai";
+  const canBribe = T.f === "gang" && e.type !== "boss" && ((S.inv.can || 0) + (S.inv.ammo || 0) >= 2);
+  const fixed = e.type === "turret" || e.type === "boss";
+  openModal(`<h3>${T.i} ${e.name || T.n}</h3>
+   <div class="hpline"><span>Враг: <b>${e.hp}</b>/${T.hp}</span><span>Вы: <b>${S.p.hp}</b>/100</span><span class="muted">${S.weapon && S.inv[S.weapon] ? ITEMS[S.weapon].n : "кулаки"}${S.vest ? " · броня" : ""}</span></div>
+   <div class="acts">
+    <button class="btn bad" onclick="fightHit()">Атаковать</button>
+    ${hasEmp ? `<button class="btn acc" onclick="fightEmp()">ЭМИ-граната <small>мгновенно отключает машину</small></button>` : ""}
+    ${T.f === "gang" && (S.inv.molotov || 0) > 0 ? `<button class="btn acc" onclick="fightMolotov()">Молотов <small>40 урона</small></button>` : ""}
+    ${canBribe ? `<button class="btn" onclick="fightBribe()">Откупиться <small>2 предмета: консервы / патроны</small></button>` : ""}
+    <button class="btn" onclick="fightFlee()">${fixed ? "Отступить" : "Бежать"} <small>${fixed ? "уйти в соседнюю клетку" : "60% шанс, −8 энергии"}</small></button>
+   </div>
+   <div class="clog">${fight.log.slice(-6).reverse().join("<br>")}</div>`);
+}
+function enemyHit() {
+  const T = ENEMY[fight.e.type];
+  if (Math.random() < .2) { fight.log.push("Враг промахнулся"); return; }
+  const d = hurt(rnd(T.d[0], T.d[1])); fight.log.push(`${T.n} бьёт: −${d} HP`);
+}
+function fightHit() {
+  if (!fight) return; const e = fight.e, T = ENEMY[e.type];
+  const pd = playerDmg();
+  if (Math.random() < .15) fight.log.push("Вы промахнулись (" + pd.n + ")");
+  else { e.hp -= pd.d; fight.log.push(`Вы (${pd.n}): −${pd.d}`); }
+  if (e.hp <= 0) return winFight();
+  enemyHit(); if (fight) renderFight();
+}
+function fightEmp() { if (!fight) return; dec("emp"); fight.log.push("ЭМИ! Машина отключена"); fight.e.hp = 0; winFight(); }
+function fightMolotov() {
+  if (!fight || !S.inv.molotov) return; dec("molotov"); fight.e.hp -= 40; fight.log.push("Молотов! −40");
+  if (fight.e.hp <= 0) return winFight(); enemyHit(); if (fight) renderFight();
+}
+function fightBribe() {
+  let need = 2; for (const k of ["can", "ammo"]) { while (need && S.inv[k]) { dec(k); need--; } }
+  log("Откупились от: " + ENEMY[fight.e.type].n);
+  const e = fight.e; ents = ents.filter(x => x !== e); fight = null; closeModal(); renderAll(); save();
+}
+function fightFlee() {
+  if (!fight) return; const e = fight.e; const fixed = e.type === "turret" || e.type === "boss";
+  if (!fixed) { if (S.p.en < 8) { fight.log.push("Нет сил бежать"); enemyHit(); return fight && renderFight(); } S.p.en -= 8;
+    if (Math.random() > .6) { fight.log.push("Не удалось сбежать!"); enemyHit(); return fight && renderFight(); } }
+  const opts = []; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const a = S.p.i + di, b = S.p.j + dj;
+    if ((di || dj) && inGrid(a, b) && inCity[b * GW + a] && !ents.some(x => x.i === a && x.j === b)) opts.push([a, b]); }
+  if (!opts.length) { fight.log.push("Некуда бежать!"); enemyHit(); return fight && renderFight(); }
+  const [a, b] = pick(opts); fight = null; closeModal();
+  e.next = Date.now() + 5000; e.aggro = false;
+  S.p.i = a; S.p.j = b; log("Вы сбежали", "a"); enterCell(a, b); centerOnPlayer();
+}
+function winFight() {
+  const e = fight.e, T = ENEMY[e.type]; fight = null; closeModal();
+  ents = ents.filter(x => x !== e); S.kills++; gainXp({bandit:10,thug:18,drone:14,turret:40,boss:70}[e.type]);
+  const got = [];
+  for (const [it, n] of T.loot) if (Math.random() < .6) { const g = addItem(it, e.type === "boss" ? n : rnd(1, n)); if (g) got.push(ITEMS[it].n + (g > 1 ? " ×" + g : "")); }
+  log(`${T.n} повержен` + (got.length ? ". Трофеи: " + got.join(", ") : ""), "g");
+  if (e.guard) { questProgress("clear", e.zone); storyCheck("kill", e.zone); }
+  if (e.guard) {
+    C(key(POIS[e.zone].i, POIS[e.zone].j)).cleared = Date.now();
+    log("★ Центр зоны «" + POIS[e.zone].n + "» зачищен — территорию можно захватывать (30 мин)", "g");
+    toast("Зона ослаблена: " + POIS[e.zone].n);
+  }
+  renderAll(); save(); setTimeout(checkEncounter, 400);
+}
+
+/* ----- ответные атаки на ваши клетки ----- */
+let lastRaid = Date.now();
+function raids() {
+  const now = Date.now(); if (now - lastRaid < 120e3) return; lastRaid = now;
+  const own = Object.keys(S.cells).filter(k => S.cells[k].o);
+  const exposed = own.filter(k => { const [i, j] = k.split(",").map(Number); return !microFree(microOf[j * GW + i]) && (zoneOf[j * GW + i] >= 0 || hash(i, j, Math.floor(now / 120e3)) < .15); });
+  if (!exposed.length || Math.random() < .5) return;
+  const k = pick(exposed), c = S.cells[k]; const [i, j] = k.split(",").map(Number);
+  if (i === S.p.i && j === S.p.j || k === S.base) return;
+  const def = nearDefense(i, j);
+  if (Math.random() < .1 * coreLv("shield")) { log("Набег на " + cellBase(i, j).n + " отбит: Ядро Щита", "g"); return; }
+  if (def === "turret" || (def === "tower" && Math.random() < .5)) { log("Набег на " + cellBase(i, j).n + " отбит: " + (def === "turret" ? "сработал самострел" : "вышка заметила банду заранее"), "g"); dirty = true; return; }
+  if (garrisonFight(c, i, j)) { dirty = true; save(); return; }
+  if (c.mt) { c.mt--; log("Набег на " + cellBase(i, j).n + " сорван вашей растяжкой", "g"); }
+  else if (c.f) { if (Math.random() < .3) { delete c.f; log("Набег на " + cellBase(i, j).n + " отбит, баррикады разрушены", "a"); } else log("Набег на вашу клетку отбит баррикадами", "g"); }
+  else { delete c.o; if (c.b) { c.b.y = Date.now(); if (--c.b.lv <= 0) { log(BUILD[c.b.t].n + " разрушен(а) бандой", "b"); delete c.b; } else log(BUILD[c.b.t].n + " разграблен(а): уровень снижен до " + c.b.lv, "b"); }
+    log("Потеряна территория: " + cellBase(i, j).n + " (" + DISTRICTS[distOf[j * GW + i]].n + ")", "b"); toast("Набег! Потеряна клетка"); }
+  dirty = true; save();
+}
+
+/* ----- выживание: тик раз в секунду ----- */
+const RATE = {food: 1 / 45, water: 1 / 30, en: 1 / 6, hp: 1 / 20};
+function survive(dtSec, offline) {
+  const p = S.p; const own = (S.cells[key(p.i, p.j)] || {}).o;
+  const meta = 1 - .15 * pk("meta");
+  p.food = Math.max(0, p.food - RATE.food * dtSec * meta);
+  p.water = Math.max(0, p.water - RATE.water * dtSec * meta);
+  p.en = Math.min(100, p.en + RATE.en * dtSec * (resting && own ? 3 : 1) * (1 + .25 * pk("stam")));
+  if (p.food <= 0 || p.water <= 0) { p.hp -= dtSec / 10; if (offline) p.hp = Math.max(10, p.hp); else if (p.hp <= 0) { p.hp = 0; die(); } }
+  else if (p.food > 40 && p.water > 40) { const hc = S.cells[key(p.i, p.j)]; const med = bWorking(hc) && hc.b.t === "med" ? 2 : 1;
+    p.hp = Math.min(100, p.hp + RATE.hp * dtSec * (resting && own ? 6 * med : 1)); }
+}
+(function catchUp() {
+  const dt = Math.min(2 * 3600, Math.max(0, (Date.now() - (S.t || Date.now())) / 1000));
+  if (dt > 60) { survive(dt, true); log("Вас не было " + Math.round(dt / 60) + " мин", "a"); }
+})();
+
+/* ----- GPS ----- */
+let gpsWatch = null;
+function setGps(on) {
+  if (on) {
+    if (!navigator.geolocation) { toast("GPS недоступен"); return; }
+    try {
+      gpsWatch = navigator.geolocation.watchPosition(pos => {
+        const [x, y] = merc(pos.coords.longitude, pos.coords.latitude); const [i, j] = cellOf(x, y);
+        if (!inGrid(i, j) || !inCity[j * GW + i]) { toast("Вы вне карты Алматы"); return; }
+        if (i !== S.p.i || j !== S.p.j) { if (fight) return; busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); centerOnPlayer(); }
+      }, err => { toast("GPS: " + (err.code === 1 ? "доступ запрещён" : "нет сигнала")); setGps(false); }, {enableHighAccuracy: true, maximumAge: 5000});
+      S.gps = true; log("Режим GPS включён", "a");
+    } catch (e) { toast("GPS недоступен в этом окне"); S.gps = false; }
+  } else { if (gpsWatch !== null) navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; S.gps = false; }
+  document.getElementById("bGps").classList.toggle("on", S.gps); renderAll(); save();
+}
+document.getElementById("bGps").onclick = () => setGps(!S.gps);
+document.getElementById("bCenter").onclick = centerOnPlayer;
+
+/* ================== UI ================== */
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.t));
+function setTab(t) { tab = t; document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t)); renderPane(); }
+function openModal(html) { document.getElementById("mbox").innerHTML = html; document.getElementById("modal").style.display = "flex"; }
+function closeModal() { document.getElementById("modal").style.display = "none"; }
+function renderHud() {
+  const p = S.p; const set = (id, v) => { document.getElementById("v" + id).textContent = Math.round(v); document.getElementById("b" + id).style.width = v + "%"; };
+  set("Hp", p.hp); set("Food", p.food); set("Water", p.water); set("En", p.en);
+  const c = S.cells[key(p.i, p.j)] || {};
+  const z = zoneFaction(p.i, p.j);
+  document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span> · ${DISTRICTS[distOf[p.j * GW + p.i]].n}` + (microOf[p.j * GW + p.i] >= 0 ? ` · мкр ${MICRO[microOf[p.j * GW + p.i]].n}` : "") + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
+    (c.o ? ` · <span style="color:var(--good)">ваша${c.f ? " 🛡" : ""}</span>` : z ? ` · <span style="color:${z === "ai" ? "var(--ai)" : "var(--gang)"}">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : "") +
+    (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡 GPS" : "") + " · " + S.money + " 💰";
+  const eb = document.getElementById("eventBar"); const E = S.event;
+  if (E && E.t !== "quake") { eb.style.display = "block"; eb.innerHTML = EV[E.t] + (E.i !== undefined ? " · " + cheb(E.i, E.j, p.i, p.j) + " кл. от вас" : "") + " · " + Math.ceil((E.until - Date.now()) / 60e3) + " мин"; }
+  else eb.style.display = "none";
+}
+function renderPane() {
+  const el = document.getElementById("pane"); const p = S.p;
+  if (tab === "act") {
+    const c = S.cells[key(p.i, p.j)] || {};
+    const left = lootLeft(c);
+    const lock = !!(busy || travel || fight);
+    const [capOk, capWhy] = canCapture();
+    const trap = baseTrap(p.i, p.j) && !c.td && c.s;
+    const near = ents.filter(e => cheb(e.i, e.j, p.i, p.j) <= 2 && visible(e.i, e.j));
+    const here = cellBase(p.i, p.j);
+    const isBase = S.base === key(p.i, p.j); const inc = isBase ? pendingIncome() : 0;
+    const mins = c.ls ? Math.max(0, Math.ceil((RESPAWN - (Date.now() - c.ls)) / 60e3)) : 0;
+    el.innerHTML = `
+     ${travel ? `<p class="muted">В пути…</p>` : ""}
+     <div class="grid2">
+      <button class="btn acc" ${lock || left <= 0 ? "disabled" : ""} onclick="actSearch()">🔍 Обыскать<small>${left > 0 ? "8 с · −8⚡ · осталось " + left : "пусто · ещё " + mins + " мин"}</small></button>
+      <button class="btn" ${lock ? "disabled" : ""} onclick="actScout()">👁 Разведка<small>5 с · −6⚡ · радиус ${SCAN_R}</small></button>
+      <button class="btn" ${lock || !capOk ? "disabled" : ""} onclick="actCapture()">🚩 Захватить<small>${capOk ? "15 с · −15⚡" : capWhy}</small></button>
+      ${c.o ? `<button class="btn" ${lock || (S.inv.parts || 0) < 5 || c.f ? "disabled" : ""} onclick="actFortify()">🛡 Укрепить<small>${c.f ? "уже укреплено" : "5 деталей · 12 с"}</small></button>`
+            : trap ? `<button class="btn bad" ${lock ? "disabled" : ""} onclick="actDisarm()">⚠ Обезвредить<small>7 с · 80% успех</small></button>`
+            : `<button class="btn" disabled>🛡 Укрепить<small>только своя клетка</small></button>`}
+      ${c.o ? (c.b ? (() => { const B = BUILD[c.b.t], k = key(p.i, p.j), r = bReady(k), bl = Date.now() < c.b.ready;
+          return `<button class="btn ${r ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="openBuild()">${B.i} ${B.n}${bLv(c) ? " · ур. " + bLv(c) : ""}<small>${bl ? "🏗 стройка: " + Math.ceil((c.b.ready - Date.now()) / 60e3) + " мин" : B.out ? (r ? "готово: " + ITEMS[B.out].n + " ×" + r : "копит продукцию") : "работает"}</small></button>`; })()
+        : `<button class="btn" ${lock ? "disabled" : ""} onclick="openBuild()">🏗 Построить<small>огород, генератор, вышка…</small></button>`) : ""}
+      ${c.o ? `<button class="btn ${resting ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="resting=!resting;renderPane()">🔥 ${resting ? "Отдыхаю…" : "Отдых"}<small>×3 энергия, ×6 лечение</small></button>` : ""}
+      ${c.o ? `<button class="btn" ${lock || !S.inv.trap || (c.mt || 0) >= 2 ? "disabled" : ""} onclick="actTrap()">✳ Растяжка<small>${c.mt || 0}/2 · ${S.inv.trap ? "есть " + S.inv.trap : "сделать на верстаке"}</small></button>` : ""}
+      ${c.o && !isBase ? `<button class="btn" ${lock || (S.inv.parts || 0) < 10 ? "disabled" : ""} onclick="actBase()">🏠 ${S.base ? "Перенести убежище" : "Убежище"}<small>10 деталей · 20 с</small></button>` : ""}
+      ${isBase ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openStash()">📦 Склад<small>${Object.values(S.stash).reduce((a, b) => a + b, 0)} предм.</small></button>
+        <button class="btn acc" ${lock ? "disabled" : ""} onclick="openBench()">🔧 Верстак<small>крафт</small></button>
+        <button class="btn ${inc ? "acc" : ""}" ${lock || !inc ? "disabled" : ""} onclick="collectIncome()">💰 Доход<small>${inc ? "готово: " + inc : "копится с клеток"}</small></button>` : ""}
+      ${S.trader && S.trader.i === p.i && S.trader.j === p.j ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openTrade()">🐪 Торговать<small>${S.money} 💰</small></button>` : ""}
+      ${S.quests.map((q, k) => q.t === "deliver" && q.i === p.i && q.j === p.j ? `<button class="btn acc" ${(S.inv[q.it] || 0) >= q.n ? "" : "disabled"} onclick="deliverQuest(${k})">🤝 Отдать: ${ITEMS[q.it].n} ×${q.n}<small>${q.who} · есть ${S.inv[q.it] || 0}</small></button>` : "").join("")}
+      ${cellBase(p.i, p.j).t === "garage" && S.vehicle !== "car" ? `<button class="btn" ${lock || !(S.inv.akb >= 1 && (S.inv.parts || 0) >= 12 && (S.inv.fuel || 0) >= 1) ? "disabled" : ""} onclick="actRepairCar()">🚗 Починить машину<small>аккумулятор, 12 деталей, бензин</small></button>` : ""}
+      ${here.t === "camp" ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openCamp()">🏫 Лагерь<small>${(S.story || {}).t2 === 2 ? "ждут воду и бинты" : "медсестра, лавка"}</small></button>` : ""}
+      ${here.t === "metro" && here.poi && here.poi.link ? `<button class="btn" ${lock ? "disabled" : ""} onclick="actTunnel()">🚇 Тоннель → ${POI_BY(here.poi.link).n.replace("Метро ", "")}<small>20 с · −10⚡ · безопасная станция</small></button>` : ""}
+      ${here.t === "highrise" ? `<button class="btn" ${lock ? "disabled" : ""} onclick="actRoof()">🔭 На крышу<small>10 с · −10⚡ · обзор 5 кл.</small></button>` : ""}
+      ${isLake(here.poi) ? `<button class="btn" ${lock || (c.wl && Date.now() - c.wl < 5 * 60e3) ? "disabled" : ""} onclick="actLake()">💧 Набрать воды<small>+2 воды · риск грязной</small></button>` : ""}
+      ${c.o ? `<button class="btn" ${lock ? "disabled" : ""} onclick="openGuard()">🛡 Охрана<small>${gCount(c.g) ? "сила " + gStr(c.g) + " · " + unitsTxt(c.g) : "резерв: " + gCount(S.reserve)}</small></button>` : ""}
+      ${S.hunt && S.hunt.found && S.hunt.i === p.i && S.hunt.j === p.j ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="huntOpen()">✨ Вскрыть ядро<small>20 с · 55%${S.inv.emp ? " + ЭМИ 35%" : ""} · ещё ${Math.ceil((S.hunt.found + 15 * 60e3 - Date.now()) / 60e3)} мин</small></button>`
+        : `<button class="btn" ${lock ? "disabled" : ""} onclick="huntPing()">🧿 Пеленг ядра<small>${S.hunt ? "пеленгов: " + S.hunt.pings.length + " · последний: " + (S.hunt.pings.length ? BANDS[S.hunt.pings[S.hunt.pings.length - 1].b][2] : "—") : Date.now() < (S.huntNext || 0) ? "перезарядка " + Math.ceil((S.huntNext - Date.now()) / 60e3) + " мин" : "искать сигнал ИИ"}</small></button>`}
+      <button class="btn" ${lock || !have("batt") ? "disabled" : ""} onclick="openScan()">📡 Сканер залежей<small>${have("batt") ? "1 батарейка · 10 мин" : "нужна батарейка"}</small></button>
+      <button class="btn ${atCamp() ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="openMarket()">🛒 Барахолка<small>${atCamp() ? "лагерь: без наценки" : "курьер: наценка " + Math.round((1 - fee()) * 100) + "%"}${S.deficit && Date.now() < S.deficit.until ? " · 🔥 " + ITEMS[S.deficit.k].n : ""}</small></button>
+      <button class="btn" ${lock ? "disabled" : ""} onclick="openRadio()">📻 Рация<small>${S.quests.length}/3 заданий${Date.now() < S.qNext ? " · " + Math.ceil((S.qNext - Date.now()) / 60e3) + " мин" : ""}</small></button>
+     </div>
+     <p class="muted" style="margin:10px 0 4px">${S.gps ? "GPS: перемещайтесь по городу физически." : `Тап по клетке в рамке — переход (до ${moveR()} кл. = ${moveR() * CELL_REAL} м, ${carOn() ? "0.5 бензина" : S.vehicle === "bike" ? "−2⚡" : "−" + EN_PER_CELL + "⚡"} за клетку).`}</p>
+     ${near.length ? `<p style="color:var(--bad);margin:4px 0">Рядом: ${near.map(e => ENEMY[e.type].i + " " + (e.name || ENEMY[e.type].n)).join(", ")}</p>` : ""}`;
+  } else if (tab === "inv") {
+    const rows = Object.entries(S.inv).map(([k, n]) => {
+      const it = ITEMS[k];
+      const act = it.use ? `<button class="btn mini acc" onclick="useItem('${k}')">Исп.</button>` : it.dmg ? `<button class="btn mini ${S.weapon === k ? "acc" : ""}" onclick="useItem('${k}')">${S.weapon === k ? "В руках" : "Взять"}</button>` : k === "vest" ? `<button class="btn mini acc" onclick="useItem('vest')">Надеть</button>` : k === "bike" ? `<button class="btn mini acc" ${S.vehicle ? "disabled" : ""} onclick="mountBike()">Сесть</button>` : k === "fuel" && S.vehicle === "car" ? `<button class="btn mini acc" onclick="refuel()">Заправить</button>` : "";
+      const info = it.use ? Object.entries(it.use).map(([a, v]) => "+" + v + {food: " еда", water: " вода", hp: " HP"}[a]).join(", ") : it.dmg ? "урон " + it.dmg + (it.ammo ? ", нужны патроны" : "") : ITEM_INFO[k] || "";
+      return `<div class="row"><div class="n">${it.n} ×${n}<small>${info}</small></div>${act}<button class="btn mini" onclick="dropItem('${k}')">✕</button></div>`;
+    }).join("");
+    const perks = Object.keys(S.perks).map(k => PERKS[k].n + " " + S.perks[k]).join(", ");
+    el.innerHTML = `<div class="dist"><div class="h"><span>Уровень ${S.lvl}</span><span class="muted">${S.xp}/${xpNext()} опыта</span></div><i><s style="width:${S.xp / xpNext() * 100}%;background:var(--acc)"></s></i>${perks ? `<div class="muted" style="margin-top:4px">${perks}</div>` : ""}${S.pendingPerks ? `<button class="btn mini acc" style="margin-top:6px" onclick="openPerks()">Выбрать навык (${S.pendingPerks})</button>` : ""}</div>
+     ${S.vehicle ? `<div class="row"><div class="n">${S.vehicle === "bike" ? "🚲 Велосипед" : "🚗 Нива · бак " + S.tank + "/10"}<small>${S.vehicle === "bike" ? "+1 радиус, вдвое быстрее, −2⚡/кл." : "+3 радиус, втрое быстрее, 0⚡, 0.5 бензина/кл."}</small></div>${S.vehicle === "bike" ? `<button class="btn mini" onclick="dismount()">Слезть</button>` : ""}</div>` : ""}
+     ${Object.keys(S.cores || {}).length ? `<b>✨ Ядра «Тұмар»</b>${Object.entries(S.cores).map(([id, lv]) => `<div class="row"><div class="n">${CORES[id].n} · ур. ${lv}<small>${CORES[id].d}</small></div></div>`).join("")}` : ""}
+     <p class="muted" style="margin:0 0 6px">Вес ${weight().toFixed(1)} / ${maxW()} кг${S.vest ? " · бронежилет надет" : ""} · убито ${S.kills}</p>${rows || '<p class="muted">Пусто</p>'}
+     <div class="row"><div class="n">Собрать ЭМИ-гранату<small>4 детали + 2 батарейки</small></div><button class="btn mini" ${(S.inv.parts || 0) >= 4 && (S.inv.batt || 0) >= 2 ? "" : "disabled"} onclick="craftEmp()">Собрать</button></div>`;
+  } else if (tab === "dist") {
+    const qs = S.quests.map((q, k) => `<div class="row"><div class="n">❗ ${q.txt}<small>${q.i !== undefined ? cheb(q.i, q.j, p.i, p.j) + " кл. от вас · " : ""}${q.t === "capture" ? distCount(q.d) + "/" + q.need + " · " : ""}${q.money} 💰</small></div><button class="btn mini" onclick="dropQuest(${k})">✕</button></div>`).join("");
+    const st = (S.story || {}).t2 || 0;
+    const story = `<b>Сюжет: Тастак-2</b><div class="dist"><div class="h"><span>${st >= 6 ? "★ Освобождён" : "Шаг " + st + "/5: " + STORY[st].txt}</span></div>${st < 6 ? `<i><s style="width:${(st - 1) / 5 * 100}%;background:var(--acc)"></s></i>` : ""}</div>
+      <div class="dist"><div class="h"><span>мкр Тастак-2</span><span class="muted">${microCount(0)}/${MICRO[0].total} · ${microPct(0)}%</span></div><i><s style="width:${Math.min(100, microPct(0) / 60 * 100)}%"></s></i></div>`;
+    const now = Date.now(), bl = Object.keys(S.cells).filter(k => S.cells[k].b).map(k => { const c = S.cells[k], B = BUILD[c.b.t]; const [i, j] = k.split(",").map(Number);
+      const st = now < c.b.ready ? "🏗 ещё " + Math.ceil((c.b.ready - now) / 60e3) + " мин" : !c.o ? "клетка потеряна" : B.out ? "готово " + bReady(k) + " / " + bCap(k) : B.g === "hq" ? "+" + c.b.lv * 25 + "% в радиусе " + HQ_R : "работает";
+      const cd = Math.floor(bCond(c)), rm = bLv(c) ? repairMoney(c) : 0;
+      return `<div class="row"><div class="n">${B.i} ${B.n} · ур. ${bLv(c)}<small>${cellBase(i, j).n} · ${cheb(i, j, p.i, p.j)} кл. от вас · ${st}</small><small>состояние <span style="color:${cd >= 50 ? "var(--good)" : cd >= 20 ? "var(--acc)" : "var(--bad)"}">${cd}%</span>${B.depo ? " · залежь " + pct(depoQ(i, j, B.depo)) : ""}</small></div>${rm ? `<button class="btn mini" ${S.money >= rm ? "" : "disabled"} onclick="repairRemote('${k}')">🔧 ${rm} 💰</button>` : ""}</div>`; }).join("");
+    el.innerHTML = story + `<b>Постройки</b>${bl || '<p class="muted">Нет. Захватите клетку и нажмите 🏗 Построить.</p>'}<b style="display:block;margin-top:10px">Задания</b>${qs || '<p class="muted">Нет. Возьмите через 📻 Рацию.</p>'}<b style="display:block;margin:10px 0 6px">Районы</b>` + DISTRICTS.map((d, k) => { const pc = distPct(k); return `<div class="dist"><div class="h"><span>${(S.dist || {})[k] ? "★ " : ""}${d.n}</span><span class="muted">${distCount(k)}/${d.total} · ${pc}%</span></div><i><s style="width:${Math.min(100, pc / 60 * 100)}%"></s></i></div>`; }).join("") +
+      `<p class="muted">Клеток всего: ${Object.values(S.cells).filter(c => c.o).length} · доход к сбору: ${pendingIncome()} (собирается в убежище, 1 ед. / 10 мин с клетки, макс ${YIELD_CAP}).</p><p class="muted">Район ваш при 60% клеток. Зоны банд и ИИ можно захватывать только после зачистки их центра. Неукреплённые клетки у вражеских зон теряются при набегах.</p>
+       <button class="btn bad mini" onclick="confirmReset()">Начать заново</button>`;
+  } else {
+    el.innerHTML = `<div class="log">${S.log.map(([t, m, c]) => `<div><span class="tm">${t}</span><span class="${c}">${m}</span></div>`).join("") || '<p class="muted">Пусто</p>'}</div>`;
+  }
+}
+function confirmReset() {
+  openModal(`<h3>Начать заново?</h3><p class="muted">Прогресс, территории и рюкзак будут удалены.</p><div class="acts"><button class="btn bad" onclick="doReset()">Да, сбросить</button><button class="btn" onclick="closeModal()">Отмена</button></div>`);
+}
+function doReset() { setGps(false); S = newState(); ents = []; closeModal(); intro(); enterCell(S.p.i, S.p.j); centerOnPlayer(); }
+function renderAll() { renderHud(); renderPane(); dirty = true; }
+function intro() {
+  log("Сбой. Городская ИИ-сеть «Тұмар» захватила энергосистему. ТЭЦ горят, связь мертва.", "a");
+  openModal(`<h3>Алматы: Сбой</h3><p>Городская ИИ-сеть вышла из-под контроля. Дроны патрулируют улицы, на рынках правят банды, на дорогах ловушки.</p>
+  <p class="muted">• Тап по клетке в рамке — переход.<br>• Обыскивайте клетки, следите за едой и водой.<br>• Разведка показывает ловушки и врагов.<br>• Захватывайте клетки и районы, укрепляйте их баррикадами.<br>• 📡 — режим GPS: ходите по реальному городу.</p>
+  <div class="acts"><button class="btn acc" onclick="closeModal()">Выжить</button></div>`);
+}
+
+/* ================== ЦИКЛ ================== */
+let lastTick = Date.now(), lastSave = Date.now();
+function frame() {
+  const now = Date.now();
+  if (travel && now - travel.t0 >= travel.dur) arrive();
+  if (travel) dirty = true;
+  if (busy) {
+    const k = Math.min(1, (now - busy.t0) / busy.dur); document.getElementById("pBar").style.width = k * 100 + "%";
+    if (k >= 1) { const b = busy; busy = null; hideProgress(); if (b.i === S.p.i && b.j === S.p.j) b.done(); renderAll(); save(); }
+  }
+  if (now - lastTick >= 1000) {
+    const dt = (now - lastTick) / 1000; lastTick = now;
+    if (!fight) survive(dt, false);
+    populate(); stepEnts(); raids(); buildTick(now); mktTick(now); bldEventTick(now); cacheTick(now); huntTick(now); dirty = true; traderTick(now); eventTick(now); renderHud();
+    if (S.pendingPerks > 0 && !fight && document.getElementById("modal").style.display !== "flex") openPerks();
+    if (tab === "act" && !busy) renderPane();
+    if (now - lastSave > 10000) { lastSave = now; save(); }
+  }
+  if (dirty) draw();
+  requestAnimationFrame(frame);
+}
+window.addEventListener("resize", resize);
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+
+/* ================== СТАРТ ================== */
+resize();
+centerOnPlayer(); cam.s = 0.06;
+const firstRun = !S.log.length;
+if (firstRun) intro();
+storyStart();
+reveal(S.p.i, S.p.j, 1, false);
+if (S.gps) { S.gps = false; setGps(true); }
+renderAll();
+requestAnimationFrame(frame);
+try { if ("serviceWorker" in navigator && location.protocol === "https:" && window.top === window.self) navigator.serviceWorker.register("sw.js").catch(() => {}); } catch (e) {}
+</script>
+</body>
+</html>
