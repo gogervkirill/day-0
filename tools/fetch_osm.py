@@ -23,7 +23,7 @@ UA = "almaty-sboy-game/1.0 (data fetch script)"
 
 
 RAW = sys.argv[sys.argv.index("--raw") + 1] if "--raw" in sys.argv else None
-RAW_NAMES = {"город": "city", "районы": "districts", "точки": "pois", "дороги": "roads"}
+RAW_NAMES = {"город": "city", "районы": "districts", "точки": "pois", "дороги": "roads", "застройка": "landuse"}
 
 
 def overpass(query, label):
@@ -123,6 +123,85 @@ def pack_rings(rings, tol):
     return out
 
 
+# ---------- застройка → тип клетки игры ----------
+# Сетка должна совпадать с index.html: CELL_REAL, LAT0, BOUNDS. Игра проверяет lu.cell.
+import math
+CELL_REAL, LAT0 = 125, 43.25
+BOUNDS = (76.73, 43.13, 77.11, 43.43)
+R_EARTH = 6378137
+CELL_M = CELL_REAL / math.cos(math.radians(LAT0))
+def merc(lon, lat):
+    return R_EARTH * math.radians(lon), R_EARTH * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+OX, OY = merc(BOUNDS[0], BOUNDS[1]); EX, EY = merc(BOUNDS[2], BOUNDS[3])
+GW, GH = math.ceil((EX - OX) / CELL_M), math.ceil((EY - OY) / CELL_M)
+
+LANDUSE_Q = """[out:json][timeout:600][maxsize:1073741824];area(AREA)->.a;(
+way(area.a)["landuse"~"^(residential|industrial|commercial|retail|garages|military|cemetery|construction|brownfield|farmland|orchard|allotments|forest|recreation_ground|railway)$"];
+rel(area.a)["landuse"~"^(residential|industrial|military|cemetery|forest|commercial|retail)$"];
+way(area.a)["leisure"~"^(park|garden)$"];rel(area.a)["leisure"="park"];
+way(area.a)["natural"~"^(water|wood)$"];rel(area.a)["natural"~"^(water|wood)$"];
+);out geom qt;"""
+# код клетки: W вода, M военные, I промзона, G гаражи, C торговля/офисы, P парк, L лес, X кладбище, S стройка, F сады/дачи, R жильё
+LU_PRI = "WMIGCPLXSFR"
+def lu_code(t):
+    lu, le, na = t.get("landuse"), t.get("leisure"), t.get("natural")
+    if na == "water": return "W"
+    if lu == "military": return "M"
+    if lu in ("industrial", "railway"): return "I"
+    if lu == "garages": return "G"
+    if lu in ("commercial", "retail"): return "C"
+    if le in ("park", "garden") or lu == "recreation_ground": return "P"  # газоны (grass) не считаем: дробят жилые кварталы
+    if lu == "forest" or na == "wood": return "L"
+    if lu == "cemetery": return "X"
+    if lu in ("construction", "brownfield"): return "S"
+    if lu in ("farmland", "orchard", "allotments"): return "F"
+    if lu == "residential": return "R"
+    return None
+
+def rasterize_landuse(elements):
+    grid = bytearray(b"." * (GW * GH)); stat = {}
+    for el in elements:
+        code = lu_code(el.get("tags", {}))
+        if not code:
+            continue
+        if el["type"] == "way":
+            g = el.get("geometry") or []
+            rings = [[[p["lon"], p["lat"]] for p in g if p]] if len(g) >= 4 else []
+        else:
+            rings = rings_from_relation(el)
+        cr = []
+        for r in rings:  # в координаты сетки
+            pts = [((mx - OX) / CELL_M, (my - OY) / CELL_M) for mx, my in (merc(x, y) for x, y in r)]
+            if len(pts) >= 3: cr.append(pts)
+        if not cr:
+            continue
+        xs = [p[0] for r in cr for p in r]; ys = [p[1] for r in cr for p in r]
+        i0, i1 = max(0, int(min(xs))), min(GW - 1, int(max(xs))); j0, j1 = max(0, int(min(ys))), min(GH - 1, int(max(ys)))
+        pr = LU_PRI.index(code)
+        for j in range(j0, j1 + 1):
+            cy = j + .5
+            for i in range(i0, i1 + 1):
+                cx = i + .5; inside = False
+                for r in cr:  # чётно-нечётно по всем кольцам
+                    n = len(r)
+                    for k in range(n):
+                        (x1, y1), (x2, y2) = r[k], r[k - 1]
+                        if (y1 > cy) != (y2 > cy) and cx < (x2 - x1) * (cy - y1) / (y2 - y1) + x1:
+                            inside = not inside
+                if inside:
+                    cur = chr(grid[j * GW + i])
+                    if cur == "." or LU_PRI.index(cur) > pr:
+                        grid[j * GW + i] = ord(code)
+    out, k = [], 0  # RLE: «число+символ»
+    while k < len(grid):
+        c, n = grid[k], 1
+        while k + n < len(grid) and grid[k + n] == c: n += 1
+        out.append((str(n) if n > 1 else "") + chr(c)); k += n
+    for c in grid: stat[chr(c)] = stat.get(chr(c), 0) + 1
+    print("  клетки: " + ", ".join(f"{k}:{v}" for k, v in sorted(stat.items())))
+    return {"cell": CELL_REAL, "w": GW, "h": GH, "s": "".join(out)}
+
+
 # ---------- классификация точек ----------
 def classify(t):
     a, s = t.get("amenity"), t.get("shop")
@@ -148,7 +227,7 @@ def classify(t):
 
 
 def main():
-    print("1/4 Ищу границу Алматы…")
+    print("1/5 Ищу границу Алматы…")
     js = overpass('[out:json][timeout:60];rel["boundary"="administrative"]["name"="Алматы"];out tags;', "город")
     rels = js["elements"]
     if not rels:
@@ -158,7 +237,7 @@ def main():
     area = 3600000000 + city_id
     print(f"  relation {city_id}, admin_level={rels[0]['tags'].get('admin_level')}")
 
-    print("2/4 Граница города и районы…")
+    print("2/5 Граница города и районы…")
     js = overpass(f"""[out:json][timeout:240];
 rel({city_id});out geom;
 area({area})->.a;
@@ -180,7 +259,7 @@ out geom;""", "районы")
             districts.append({"n": name, "r": rings})
     print(f"  город: {len(city)} колец, районов: {len(districts)} → {', '.join(d['n'] for d in districts)}")
 
-    print("3/4 Точки лута (магазины, аптеки, больницы…)… это самый долгий запрос")
+    print("3/5 Точки лута (магазины, аптеки, больницы…)… это самый долгий запрос")
     js = overpass(f"""[out:json][timeout:300];
 area({area})->.a;
 (
@@ -210,10 +289,10 @@ out center tags;""", "точки")
         stat[typ] = stat.get(typ, 0) + 1
     print("  " + ", ".join(f"{k}: {v}" for k, v in sorted(stat.items())))
 
-    print("4/4 Главные дороги и реки…")
+    print("4/5 Главные дороги и реки…")
     js = overpass(f"""[out:json][timeout:240];
 area({area})->.a;
-(way(area.a)["highway"~"^(motorway|trunk|primary|secondary)$"];way(area.a)["waterway"="river"];);
+(way(area.a)["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"];way(area.a)["waterway"="river"];);
 out geom tags;""", "дороги")
     roads, rivers = [], []
     for el in js["elements"]:
@@ -227,12 +306,16 @@ out geom tags;""", "дороги")
         if t.get("waterway"):
             rivers.append(line)
         else:
-            rank = {"motorway": 0, "trunk": 0, "primary": 1, "secondary": 2}.get(t.get("highway"), 2)
+            rank = {"motorway": 0, "trunk": 0, "primary": 1, "secondary": 2, "tertiary": 3}.get(t.get("highway"), 3)
             roads.append([t.get("name:ru") or t.get("name") or "", rank, line])
     print(f"  дорог: {len(roads)}, рек: {len(rivers)}")
 
+    print("5/5 Застройка и вода (сетка игры)… большой запрос")
+    js = overpass(LANDUSE_Q.replace("AREA", str(area)), "застройка")
+    lu = rasterize_landuse(js["elements"])
+
     data = {"v": 1, "date": time.strftime("%Y-%m-%d"), "city": city, "districts": districts,
-            "pois": pois, "roads": roads, "rivers": rivers}
+            "pois": pois, "roads": roads, "rivers": rivers, "lu": lu}
     out = os.path.abspath(OUT)
     with open(out, "w", encoding="utf-8") as f:
         f.write("/* Данные © OpenStreetMap contributors, ODbL. Сгенерировано fetch_osm.py */\n")

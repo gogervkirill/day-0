@@ -237,6 +237,19 @@ const MICRO = [
 ];
 /* ================== ПРЕДРАСЧЁТ СЕТКИ ================== */
 const N = GW * GH;
+/* Застройка из OSM (osm_almaty.js → lu): код на клетку. W вода, M военные, I промзона, G гаражи, C торговля/офисы,
+   P парк, L лес, X кладбище, S стройка, F сады/дачи, R жильё, "." — нет данных */
+const LU = (() => {
+  const L = OSM && OSM.lu; if (!L || L.cell !== CELL_REAL || L.w !== GW || L.h !== GH) return null;
+  const a = new Uint8Array(N).fill(46), s = L.s; let k = 0, x = 0;
+  while (x < s.length && k < N) { let n = 0; while (s.charCodeAt(x) >= 48 && s.charCodeAt(x) <= 57) n = n * 10 + s.charCodeAt(x++) - 48;
+    n = n || 1; a.fill(s.charCodeAt(x++), k, k + n); k += n; }
+  return a;
+})();
+const luOf = (i, j) => LU ? String.fromCharCode(LU[j * GW + i]) : ".";
+const LU_T = {R: [["res", "Жилой квартал", 1]], C: [["office", "Офисы", .5], ["shop", "Торговые ряды", .5]], I: [["industrial", "Промзона", 1]],
+  G: [["garage", "Гаражи", 1]], P: [["park", "Сквер", 1]], L: [["park", "Роща", 1]], X: [["cemetery", "Кладбище", 1]], M: [["military", "Военная часть", 1]],
+  F: [["private", "Сады и дачи", 1]], S: [["empty", "Стройка", 1]]};
 const inCity = new Uint8Array(N), distOf = new Int8Array(N).fill(-1), zoneOf = new Int16Array(N).fill(-1);
 const poiAt = new Map();
 const microOf = new Int8Array(GW * GH).fill(-1);
@@ -289,6 +302,13 @@ function pip(x, y, poly) {
       if (!cur || (PRI[t] || 0) > (PRI[cur.t] || 0)) osmCell.set(k, {t, n, cnt: (cur ? cur.cnt : 0) + 1}); else cur.cnt++;
     }
   }
+  if (LU) POIS.forEach(p => {   // логова банд — в ближайшую промзону или гаражи
+    if (p.t !== "hideout") return; const [i0, j0] = cellOf(...merc(p.ll[0], p.ll[1]));
+    for (let r = 0; r <= 16; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+      if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue; const a = i0 + di, b = j0 + dj;
+      if (inGrid(a, b) && inCity[b * GW + a] && "IG".includes(luOf(a, b))) { p.ll = unmerc(...cellCenter(a, b)); r = 99; dj = di = 99; }
+    }
+  });
   POIS.forEach((p, k) => {
     const [x, y] = merc(p.ll[0], p.ll[1]); const [i, j] = cellOf(x, y);
     p.i = i; p.j = j; p.mx = x; p.my = y; poiAt.set(key(i, j), k);
@@ -299,6 +319,9 @@ function pip(x, y, poly) {
       }
     }
   });
+  if (LU) for (let idx = 0; idx < N; idx++) if (LU[idx] === 87 && inCity[idx] && !poiAt.has(key(idx % GW, Math.floor(idx / GW)))) {
+    inCity[idx] = 0; distOf[idx] = -1; zoneOf[idx] = -1;   // вода: не ходим, не захватываем
+  }
   MICRO.forEach((m, k) => { const [a, b] = cellOf(...merc(m.bbox[0], m.bbox[1])), [c, d] = cellOf(...merc(m.bbox[2], m.bbox[3])); m.total = 0;
     for (let j = b; j <= d; j++) for (let i = a; i <= c; i++) if (inGrid(i, j) && inCity[j * GW + i]) { microOf[j * GW + i] = k; m.total++; }
     m.ci = Math.round((a + c) / 2); m.tj = d; });
@@ -311,8 +334,9 @@ function cellBase(i, j) {
   if (poiAt.has(k)) { const p = POIS[poiAt.get(k)]; return {t: p.t, n: p.n, poi: p}; }
   const o = osmCell.get(k); if (o) return {t: o.t, n: o.n + (o.cnt > 1 ? " +" + (o.cnt - 1) : ""), osm: true};
   const r = hash(i, j, 1); let acc = 0;
-  const mi = microOf[j * GW + i];
-  if (mi >= 0) { for (const c of MICRO[mi].types) { acc += c.p; if (r < acc) return {t: c.t, n: c.n}; } acc = 0; }
+  const mi = microOf[j * GW + i], lc = luOf(i, j);
+  if (mi >= 0 && (lc === "." || lc === "R")) { for (const c of MICRO[mi].types) { acc += c.p; if (r < acc) return {t: c.t, n: c.n}; } acc = 0; }
+  if (LU_T[lc]) { for (const [t, n, pr] of LU_T[lc]) { acc += pr; if (r < acc) return {t, n}; } return {t: LU_T[lc][0][0], n: LU_T[lc][0][1]}; }
   for (const c of (OSM && OSM.pois ? CELL_TYPES_OSM : CELL_TYPES)) { acc += c.p; if (r < acc) return {t: c.t, n: c.n}; }
   return CELL_TYPES[0];
 }
@@ -363,7 +387,7 @@ const RECIPES = [
 /* Доход с клеток: тип клетки → что производит каждые YIELD_MS */
 const INCOME = {res:["rusk","water"],shop:["can","water"],pharm:["band"],garage:["parts","fuel"],office:["batt"],
   market:["can","ammo","water"],mall:["batt","can"],hospital:["medkit","band"],police:["ammo"],military:["ammo","parts"],
-  tower:["parts","batt"],power:["parts","batt"],station:["can","fuel"],park:["water"],landmark:["water","can"],hideout:["ammo","can"],private:["can","rusk"],highrise:["batt"],metro:["batt","water"]};
+  tower:["parts","batt"],power:["parts","batt"],station:["can","fuel"],park:["water"],landmark:["water","can"],hideout:["ammo","can"],private:["can","rusk"],highrise:["batt"],metro:["batt","water"],industrial:["parts","batt"],cemetery:["coins"]};
 const YIELD_MS = 10 * 60e3, YIELD_CAP = 6;
 /* Перки */
 const PERKS = {
@@ -398,6 +422,8 @@ const LOOT = { // [предмет, вес шанса, мин, макс]
   metro:   [["water",2,1,2],["batt",3,1,3],["parts",2,1,2]],
   camp:    [["water",1,1,1]],
   hideout: [["ammo",4,4,10],["can",3,1,3],["pistol",.6,1,1],["medkit",1,1,1]],
+  industrial:[["parts",5,1,3],["rebar",1.5,1,1],["batt",2,1,2],["fuel",1.2,1,1],["akb",.4,1,1],["cable",1.5,1,1]],
+  cemetery:[["coins",1.5,1,3],["watch",.15,1,1],["rusk",1,1,1],["band",.8,1,1]],
 };
 const ENEMY = {
   bandit:{n:"Мародёр",i:"🔪",hp:30,d:[5,9],f:"gang",step:3200,loot:[["can",1],["ammo",3],["water",1]]},
@@ -594,12 +620,16 @@ function draw() {
   }
   // точки интереса (только открытые)
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const labels = [];   // занятые подписями прямоугольники: соседние подписи не накладываются
   POIS.forEach(p => {
     const c = S.cells[key(p.i, p.j)]; if (!c || !c.e) return;
     const [sx, sy] = toScr(...cellCenter(p.i, p.j));
     if (sx < -60 || sy < -30 || sx > W + 60 || sy > H + 30) return;
     ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText(POI_ICON[p.t] || "•", sx, sy);
-    if (cs > 18) { ctx.font = "600 11px system-ui"; ctx.fillStyle = "#000"; ctx.fillText(p.n, sx + 1, sy + cs * .5 + 5); ctx.fillStyle = "#e8d9b0"; ctx.fillText(p.n, sx, sy + cs * .5 + 4); }
+    if (cs > 18) { ctx.font = "600 11px system-ui"; const w = ctx.measureText(p.n).width, ly = sy + Math.min(cs * .5, 22) + 4;
+      const box = [sx - w / 2 - 2, ly - 7, sx + w / 2 + 2, ly + 7];
+      if (!labels.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) { labels.push(box);
+        ctx.fillStyle = "#000"; ctx.fillText(p.n, sx + 1, ly + 1); ctx.fillStyle = "#e8d9b0"; ctx.fillText(p.n, sx, ly); } }
   });
   if (S.base) { const [bi, bj] = S.base.split(",").map(Number); const [sx, sy] = toScr(...cellCenter(bi, bj));
     ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText("🏠", sx - cs * .25, sy - cs * .25); }
@@ -676,6 +706,10 @@ function draw() {
     ctx.font = Math.max(12, Math.min(22, cs * .5)) + "px system-ui";
     ctx.fillText(ENEMY[e.type].i, ex, ey);
   });
+  // реальная позиция GPS и точность
+  if (S.gps && gpsFix && Date.now() - gpsFix.t < 60e3) { const [gx, gy] = toScr(gpsFix.x, gpsFix.y), ar = gpsFix.acc / Math.cos(LAT0 * Math.PI / 180) * cam.s;
+    ctx.beginPath(); ctx.arc(gx, gy, Math.max(4, ar), 0, 7); ctx.fillStyle = "rgba(79,179,232,.12)"; ctx.fill(); ctx.strokeStyle = "rgba(79,179,232,.6)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gx, gy, 4, 0, 7); ctx.fillStyle = "#4fb3e8"; ctx.fill(); }
   // игрок
   let [px, py] = cellCenter(S.p.i, S.p.j);
   if (travel) { const k = Math.min(1, (now - travel.t0) / travel.dur); const [ax, ay] = cellCenter(travel.fi, travel.fj); px = ax + (px - ax) * k; py = ay + (py - ay) * k; }
@@ -749,7 +783,8 @@ function reveal(i, j, r, scout) {
 }
 function onTap(sx, sy) {
   const [mx, my] = toMerc(sx, sy); const [i, j] = cellOf(mx, my);
-  if (!inGrid(i, j) || !inCity[j * GW + i]) return;
+  if (!inGrid(i, j)) return;
+  if (!inCity[j * GW + i]) { if (luOf(i, j) === "W") toast("Там вода"); return; }
   if (i === S.p.i && j === S.p.j) { setTab("act"); return; }
   const c = S.cells[key(i, j)];
   if (S.gps) { toast(c && c.e ? describe(i, j) : "Неизвестная территория"); return; }
@@ -784,10 +819,22 @@ function enterCell(i, j) {
   questsOnEnter(i, j); dropOnEnter(i, j); cacheOnEnter(i, j); storyCheck("enter");
   checkEncounter(); renderAll(); save();
 }
+const streetCache = new Map();
+function streetOf(i, j) {   // ближайшая именованная улица в пределах ~клетки
+  const k = key(i, j); if (streetCache.has(k)) return streetCache.get(k);
+  const [x, y] = cellCenter(i, j); let best = null, bd = CELL * .8;
+  for (const [n, pts] of STREETS_M) { if (!n) continue;
+    for (let q = 1; q < pts.length; q++) { const [ax, ay] = pts[q - 1], [bx, by] = pts[q], dx = bx - ax, dy = by - ay;
+      if (Math.min(ax, bx) - bd > x || Math.max(ax, bx) + bd < x || Math.min(ay, by) - bd > y || Math.max(ay, by) + bd < y) continue;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1))), d = Math.hypot(x - ax - t * dx, y - ay - t * dy);
+      if (d < bd) { bd = d; best = n; } } }
+  streetCache.set(k, best); return best;
+}
 function describe(i, j) {
   const b = cellBase(i, j); const d = distOf[j * GW + i]; const c = S.cells[key(i, j)] || {};
   const z = zoneFaction(i, j);
-  return b.n + " · " + DISTRICTS[d].n + (c.o ? " · ваша" : z ? (z === "ai" ? " · зона ИИ" : " · зона банды") : "");
+  const st = streetOf(i, j);
+  return b.n + (st ? " · " + st : "") + " · " + DISTRICTS[d].n + (c.o ? " · ваша" : z ? (z === "ai" ? " · зона ИИ" : " · зона банды") : "");
 }
 function hurt(d) {
   d = d * (1 - .1 * pk("tough")); if (S.vest) d = d * (1 - ITEMS.vest.armor); d = Math.max(1, Math.round(d));
@@ -924,8 +971,8 @@ function actTrap() {
 const DEPO = {
   soil:  {n:"Плодородная земля", i:"🌱", t:{private:.3, park:.3, res:.1, landmark:.1}},
   water: {n:"Грунтовая вода",    i:"💧", t:{park:.35, metro:.2, res:.1, station:.1}},
-  scrap: {n:"Металлолом",        i:"🔩", t:{garage:.4, empty:.25, power:.3, station:.2, private:.15, tower:.15}},
-  grid:  {n:"Энергосеть",        i:"⚡", t:{power:.45, tower:.35, office:.2, highrise:.2, mall:.15}},
+  scrap: {n:"Металлолом",        i:"🔩", t:{industrial:.45, garage:.4, empty:.25, power:.3, station:.2, private:.15, tower:.15}},
+  grid:  {n:"Энергосеть",        i:"⚡", t:{industrial:.25, power:.45, tower:.35, office:.2, highrise:.2, mall:.15}},
   meds:  {n:"Медсклады",         i:"💊", t:{pharm:.45, hospital:.45, mall:.15}},
   cache: {n:"Схроны",            i:"📦", t:{police:.45, military:.5, hideout:.35, market:.15}},
 };
@@ -1796,16 +1843,23 @@ function survive(dtSec, offline) {
 })();
 
 /* ----- GPS ----- */
-let gpsWatch = null;
+let gpsWatch = null, gpsFix = null, gpsWeakT = 0;
+const GPS_ACC = 60, GPS_EDGE = .15;   // м; доля клетки от границы
 function setGps(on) {
   if (on) {
     if (!navigator.geolocation) { toast("GPS недоступен"); return; }
     try {
       gpsWatch = navigator.geolocation.watchPosition(pos => {
-        const [x, y] = merc(pos.coords.longitude, pos.coords.latitude); const [i, j] = cellOf(x, y);
-        if (!inGrid(i, j) || !inCity[j * GW + i]) { toast("Вы вне карты Алматы"); return; }
-        if (i !== S.p.i || j !== S.p.j) { if (fight) return; busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); centerOnPlayer(); }
-      }, err => { toast("GPS: " + (err.code === 1 ? "доступ запрещён" : "нет сигнала")); setGps(false); }, {enableHighAccuracy: true, maximumAge: 5000});
+        const c = pos.coords, [x, y] = merc(c.longitude, c.latitude); gpsFix = {x, y, acc: c.accuracy, t: Date.now()}; dirty = true;
+        if (c.accuracy > GPS_ACC) { if (Date.now() - gpsWeakT > 30e3) { gpsWeakT = Date.now(); toast("GPS: слабый сигнал (±" + Math.round(c.accuracy) + " м), жду точнее"); } return; }
+        const fx = (x - OX) / CELL, fy = (y - OY) / CELL, i = Math.floor(fx), j = Math.floor(fy);
+        if (!inGrid(i, j) || !inCity[j * GW + i]) { toast(inGrid(i, j) && luOf(i, j) === "W" ? "Вы у воды — клетка недоступна" : "Вы вне карты Алматы"); return; }
+        if (i === S.p.i && j === S.p.j) return;
+        const edge = Math.min(fx - i, i + 1 - fx, fy - j, j + 1 - fy);   // гистерезис: у самой границы соседней клетки не переключаемся
+        if (cheb(i, j, S.p.i, S.p.j) === 1 && edge < GPS_EDGE) return;
+        if (fight) return; busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); centerOnPlayer();
+      }, err => { if (err.code === 1) { toast("GPS: доступ запрещён"); setGps(false); } else toast("GPS: ищу сигнал…"); },
+      {enableHighAccuracy: true, maximumAge: 3000, timeout: 20000});
       S.gps = true; log("Режим GPS включён", "a");
     } catch (e) { toast("GPS недоступен в этом окне"); S.gps = false; }
   } else { if (gpsWatch !== null) navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; S.gps = false; }
@@ -1824,7 +1878,7 @@ function renderHud() {
   set("Hp", p.hp); set("Food", p.food); set("Water", p.water); set("En", p.en);
   const c = S.cells[key(p.i, p.j)] || {};
   const z = zoneFaction(p.i, p.j);
-  document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span> · ${DISTRICTS[distOf[p.j * GW + p.i]].n}` + (microOf[p.j * GW + p.i] >= 0 ? ` · мкр ${MICRO[microOf[p.j * GW + p.i]].n}` : "") + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
+  document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span>${streetOf(p.i, p.j) ? " · " + streetOf(p.i, p.j) : ""} · ${DISTRICTS[distOf[p.j * GW + p.i]].n}` + (microOf[p.j * GW + p.i] >= 0 ? ` · мкр ${MICRO[microOf[p.j * GW + p.i]].n}` : "") + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
     (c.o ? ` · <span style="color:var(--good)">ваша${c.f ? " 🛡" : ""}</span>` : z ? ` · <span style="color:${z === "ai" ? "var(--ai)" : "var(--gang)"}">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : "") +
     (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡 GPS" : "") + " · " + S.money + " 💰";
   const eb = document.getElementById("eventBar"); const E = S.event;
