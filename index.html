@@ -98,6 +98,7 @@ canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;di
     <div id="pane"></div>
   </div>
 </div>
+<input type="file" id="saveFile" accept=".json,application/json" style="display:none" onchange="const f=this.files[0]; if (f) f.text().then(importSave); this.value=''">
 <div id="modal"><div class="box" id="mbox"></div></div>
 
 <script src="osm_almaty.js"></script>
@@ -1955,10 +1956,42 @@ function renderPane() {
       return `<div class="row"><div class="n">${B.i} ${B.n} · ур. ${bLv(c)}<small>${cellBase(i, j).n} · ${cheb(i, j, p.i, p.j)} кл. от вас · ${st}</small><small>состояние <span style="color:${cd >= 50 ? "var(--good)" : cd >= 20 ? "var(--acc)" : "var(--bad)"}">${cd}%</span>${B.depo ? " · залежь " + pct(depoQ(i, j, B.depo)) : ""}</small></div>${rm ? `<button class="btn mini" ${S.money >= rm ? "" : "disabled"} onclick="repairRemote('${k}')">🔧 ${rm} 💰</button>` : ""}</div>`; }).join("");
     el.innerHTML = story + `<b>Постройки</b>${bl || '<p class="muted">Нет. Захватите клетку и нажмите 🏗 Построить.</p>'}<b style="display:block;margin-top:10px">Задания</b>${qs || '<p class="muted">Нет. Возьмите через 📻 Рацию.</p>'}<b style="display:block;margin:10px 0 6px">Районы</b>` + DISTRICTS.map((d, k) => { const pc = distPct(k); return `<div class="dist"><div class="h"><span>${(S.dist || {})[k] ? "★ " : ""}${d.n}</span><span class="muted">${distCount(k)}/${d.total} · ${pc}%</span></div><i><s style="width:${Math.min(100, pc / 60 * 100)}%"></s></i></div>`; }).join("") +
       `<p class="muted">Клеток всего: ${Object.values(S.cells).filter(c => c.o).length} · доход к сбору: ${pendingIncome()} (собирается в убежище, 1 ед. / 10 мин с клетки, макс ${YIELD_CAP}).</p><p class="muted">Район ваш при 60% клеток. Зоны банд и ИИ можно захватывать только после зачистки их центра. Неукреплённые клетки у вражеских зон теряются при набегах.</p>
-       <button class="btn bad mini" onclick="confirmReset()">Начать заново</button>`;
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn mini acc" onclick="openSaveIO()">💾 Сохранение: файл</button><button class="btn bad mini" onclick="confirmReset()">Начать заново</button></div>`;
   } else {
     el.innerHTML = `<div class="log">${S.log.map(([t, m, c]) => `<div><span class="tm">${t}</span><span class="${c}">${m}</span></div>`).join("") || '<p class="muted">Пусто</p>'}</div>`;
   }
+}
+/* ----- экспорт / импорт сохранения (перенос между телефоном и ПК, резервная копия) ----- */
+function openSaveIO() {
+  save();
+  openModal(`<h3>💾 Сохранение</h3><p class="muted">Прогресс хранится только в этом браузере. Выгрузите файл, чтобы сделать копию или перенести игру на другое устройство.</p>
+    <div class="acts"><button class="btn acc" onclick="exportSave()">Выгрузить файл<small>day0-save-….json</small></button>
+    <button class="btn" onclick="copySave()">Скопировать как текст<small>чтобы переслать в мессенджере</small></button>
+    <button class="btn" onclick="document.getElementById('saveFile').click()">Загрузить из файла<small>текущий прогресс будет заменён</small></button>
+    <button class="btn" onclick="pasteSaveUI()">Вставить текст сохранения</button>
+    <button class="btn" onclick="closeModal()">Закрыть</button></div>`);
+}
+const saveText = () => JSON.stringify(Object.assign({}, S, {t: Date.now(), app: "day-0"}));
+async function exportSave() {
+  const name = "day0-save-" + new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-") + ".json";
+  const file = new File([saveText()], name, {type: "application/json"});
+  try { if (navigator.canShare && navigator.canShare({files: [file]})) { await navigator.share({files: [file], title: "Алматы: Сбой — сохранение"}); return; } } catch (e) { if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast("Файл сохранён: " + name);
+}
+async function copySave() {
+  try { await navigator.clipboard.writeText(saveText()); toast("Сохранение скопировано"); }
+  catch (e) { openModal(`<h3>Скопируйте текст</h3><textarea readonly style="width:100%;height:40vh;font-size:11px" onfocus="this.select()">${saveText().replace(/</g, "&lt;")}</textarea><div class="acts"><button class="btn" onclick="closeModal()">Готово</button></div>`); }
+}
+function pasteSaveUI() {
+  openModal(`<h3>Вставьте сохранение</h3><textarea id="saveTxt" style="width:100%;height:35vh;font-size:11px" placeholder="{…}"></textarea>
+    <div class="acts"><button class="btn acc" onclick="importSave(document.getElementById('saveTxt').value)">Загрузить</button><button class="btn" onclick="closeModal()">Отмена</button></div>`);
+}
+function importSave(txt) {
+  let d; try { d = JSON.parse(txt); } catch (e) { toast("Это не сохранение игры"); return; }
+  if (!d || !d.p || typeof d.p.i !== "number" || !d.cells) { toast("Это не сохранение игры"); return; }
+  setGps(false); d = migrateCells(d); S = Object.assign(newState(), d); localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+  toast("Сохранение загружено"); setTimeout(() => location.reload(), 600);
 }
 function confirmReset() {
   openModal(`<h3>Начать заново?</h3><p class="muted">Прогресс, территории и рюкзак будут удалены.</p><div class="acts"><button class="btn bad" onclick="doReset()">Да, сбросить</button><button class="btn" onclick="closeModal()">Отмена</button></div>`);
