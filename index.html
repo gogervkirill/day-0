@@ -92,6 +92,7 @@ canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;di
     <div id="tabs">
       <button data-t="act" class="on">Действия</button>
       <button data-t="inv">Рюкзак</button>
+      <button data-t="crew">Люди</button>
       <button data-t="dist">Цели</button>
       <button data-t="log">Журнал</button>
     </div>
@@ -443,7 +444,7 @@ function newState() {
     inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
     cells: {}, log: [], kills: 0, deaths: 0, gps: false,
     xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
-    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {},
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0,
   };
 }
 function migrateCells(l) {  // старая клетка 250 м (i,j) = четыре новых 125 м: (2i..2i+1, 2j..2j+1)
@@ -690,6 +691,14 @@ function draw() {
   S.quests.forEach(q => { if (q.i !== undefined && q.t !== "clear") mark(q.i, q.j, "❗"); });
   if (S.trader && cheb(S.trader.i, S.trader.j, S.p.i, S.p.j) <= 4) mark(S.trader.i, S.trader.j, "🐪");
   (S.caches || []).forEach(c => mark(c.i, c.j, "🧰"));
+  (S.lost || []).forEach(l => mark(l.i, l.j, "🙋"));
+  { const [hi, hj] = hub(), [ax, ay] = toScr(...cellCenter(hi, hj));
+    if (pickMode) { const R = MISSION[pickMode.type].maxD, [rx, ry] = toScr(OX + (hi - R) * CELL, OY + (hj + R + 1) * CELL);
+      ctx.strokeStyle = "rgba(95,191,106,.9)"; ctx.setLineDash([8, 6]); ctx.lineWidth = 2; ctx.strokeRect(rx, ry, cs * (2 * R + 1), cs * (2 * R + 1)); ctx.setLineDash([]); }
+    (S.missions || []).forEach(ms => { const [bx, by] = toScr(...cellCenter(ms.i, ms.j)), f = Math.min(1, (now - ms.t0) / (ms.end - ms.t0)), q = f < .5 ? f * 2 : 2 - f * 2;
+      ctx.strokeStyle = "rgba(95,191,106,.7)"; ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = Math.max(13, Math.min(20, cs * .45)) + "px system-ui"; ctx.fillText("👥", ax + (bx - ax) * q, ay + (by - ay) * q);
+      ctx.font = "600 11px system-ui"; ctx.fillStyle = "#5fbf6a"; ctx.fillText(MISSION[ms.type].i + " " + Math.max(0, Math.ceil((ms.end - now) / 60e3)) + " мин", bx, by - Math.max(14, cs * .4)); }); }
   if (S.hunt) { ctx.lineWidth = 2; S.hunt.pings.forEach((pg, n) => { const B = BANDS[pg.b], al = .25 + .6 * (n + 1) / S.hunt.pings.length;
       ctx.strokeStyle = `rgba(190,120,255,${al})`;
       const ring = r => { const [x, y] = toScr(OX + (pg.i - r) * CELL, OY + (pg.j + r + 1) * CELL); return [x, y, cs * (2 * r + 1)]; };
@@ -786,6 +795,7 @@ function onTap(sx, sy) {
   const [mx, my] = toMerc(sx, sy); const [i, j] = cellOf(mx, my);
   if (!inGrid(i, j)) return;
   if (!inCity[j * GW + i]) { if (luOf(i, j) === "W") toast("Там вода"); return; }
+  if (pickMode) { pickTarget(i, j); return; }
   if (i === S.p.i && j === S.p.j) { setTab("act"); return; }
   const c = S.cells[key(i, j)];
   if (S.gps) { toast(c && c.e ? describe(i, j) : "Неизвестная территория"); return; }
@@ -817,7 +827,7 @@ function enterCell(i, j) {
       log(pick(["Растяжка!", "Мина-ловушка!", "Химический выброс!", "Провал под асфальтом!"]) + " −" + dmg + " HP", "b");
     } else { c.s = 1; log("Замечена ловушка — обошли", "a"); }
   }
-  questsOnEnter(i, j); dropOnEnter(i, j); cacheOnEnter(i, j); storyCheck("enter");
+  questsOnEnter(i, j); dropOnEnter(i, j); cacheOnEnter(i, j); lostOnEnter(i, j); storyCheck("enter");
   checkEncounter(); renderAll(); save();
 }
 const streetCache = new Map();
@@ -914,6 +924,7 @@ function actSearch() {
     }
     log(found.length ? "Найдено: " + found.join(", ") : "Ничего полезного", found.length ? "g" : "");
     if (Math.random() < (zoneFaction(S.p.i, S.p.j) ? .12 : .03) * (1 - .3 * pk("stealth"))) spawnNear("ambush");
+    else if (Math.random() < .03) offerSurvivor(newSurvivor(), "Под завалом кто-то живой! Вы помогаете выбраться.", null);
     gainXp(2);
   });
 }
@@ -1087,6 +1098,7 @@ const BUILD = {
   barracks:{g:"spec",n:"Казарма",        i:"⛺", d:"найм охраны: ур.1 собаки, ур.2 ополченцы, ур.3 ветераны", cost:{parts:14, can:4}},
   recycler:{g:"spec",n:"Пункт приёма лома", i:"♻", d:"переработка находок из тайников, +25% за уровень", cost:{parts:8, rebar:2}},
   courier:{g:"spec",n:"Курьерская служба", i:"🚲", d:"наценка курьера на барахолке: 15% / 8% / 0%", cost:{parts:8, money:30}},
+  dorm:   {g:"spec",n:"Жилой блок",      i:"🏘", d:"+3 места для выживших за уровень", cost:{parts:10, rebar:2}},
   hq:     {g:"hq",  n:"Штаб",        i:"🏢", d:"один на игрока; постройки в радиусе 5 кл. работают быстрее: +25% за уровень", cost:{parts:20, batt:5, money:40}},
 };
 const B_GROUPS = [["raw", "Добыча"], ["proc", "Переработка: берёт сырьё у соседних построек"], ["def", "Оборона"], ["spec", "Спецздания: действуют в радиусе 5 кл."], ["hq", "Особое"]];
@@ -1115,7 +1127,7 @@ function hqBoost(i, j) {          // множитель скорости от ш
 function bEvery(k) {   // интервал выработки: база / (штаб × качество залежи × состояние)
   const [i, j] = kij(k), c = S.cells[k], B = BUILD[c.b.t];
   const core = B.g === "raw" ? 1 + .1 * coreLv("harvest") : 1 + .15 * coreLv("synth");
-  return B.every * 60e3 / (hqBoost(i, j) * (B.depo ? qMult(depoQ(i, j, B.depo)) : 1) * condMult(bCond(c)) * core);
+  return B.every * 60e3 / (hqBoost(i, j) * (B.depo ? qMult(depoQ(i, j, B.depo)) : 1) * condMult(bCond(c)) * core * workMult(c));
 }
 function bPerTick(k) {
   const c = S.cells[k], B = BUILD[c.b.t]; const [i, j] = kij(k);
@@ -1182,6 +1194,10 @@ function openBuild() {
     if (c.b.t === "recycler" && lv) { const its = Object.keys(RECYCLE).filter(it => S.inv[it]);
       info = `<p class="muted">Переработка ×${(1 + .25 * (lv - 1) + .15 * coreLv("synth")).toFixed(2)}. Монеты, часы и кольца не перерабатываются, их лучше продать.</p>` + (its.map(it => `<div class="row"><div class="n">${ITEMS[it].n} ×${S.inv[it]}<small>→ ${Object.entries(RECYCLE[it]).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ")}</small></div><button class="btn mini acc" onclick="recycle('${it}')">♻</button></div>`).join("") || `<p class="muted">В рюкзаке нет лома. Ищите 🧰 тайники на карте.</p>`); }
     if (B.g === "spec" && lv && !info) info = `<p>Работает: ${B.d}.</p>`;
+    if (lv && (B.g === "raw" || B.g === "proc")) { const w = workers(c), idle = (S.crew || []).filter(m => m.st === "idle");
+      info += `<b>Работники ${w.length}/2</b> <span class="muted">(+${Math.round((workMult(c) - 1) * 100)}% выработки)</span>` +
+        w.map(m => `<div class="row"><div class="n">${PROF[m.p].i} ${m.n}<small>инженер ${m.s.eng}</small></div><button class="btn mini" onclick="freeWorker(${m.id})">Снять</button></div>`).join("") +
+        (w.length < 2 && idle.length ? `<div class="row"><div class="n muted">Поставить:</div>${idle.slice(0, 4).map(m => `<button class="btn mini acc" onclick="assignWorker(${m.id})">${m.n}</button>`).join("")}</div>` : ""); }
     if (B.depo) info = `<p class="muted">Залежь: ${DEPO[B.depo].n} <b style="color:${qColor(depoQ(S.p.i, S.p.j, B.depo))}">${pct(depoQ(S.p.i, S.p.j, B.depo))}</b> (×${qMult(depoQ(S.p.i, S.p.j, B.depo)).toFixed(2)} к скорости)</p>` + info;
     if (lv) { const cd = bCond(c), rp = repairParts(c);
       info += `<p>Состояние: <b style="color:${cd >= 50 ? "var(--good)" : cd >= 20 ? "var(--acc)" : "var(--bad)"}">${Math.floor(cd)}%</b> <span class="muted">(−${WEAR_H}% в час; ниже 50% работает медленнее, на 0% рушится)</span></p>
@@ -1386,6 +1402,171 @@ function huntOpen() {
 function huntTick(now) {
   const h = S.hunt; if (!h) return;
   if (h.found && now > h.found + 15 * 60e3 || now > h.until) { log("🧿 Сигнал ядра пропал — ИИ увёл его в сеть", "b"); S.hunt = null; S.huntNext = now + 10 * 60e3; dirty = true; }
+}
+/* ===== ВЫЖИВШИЕ И ВЫЛАЗКИ: стратегический слой ===== */
+const PROF = {
+  scav:  {n:"Сталкер",   i:"🎒", d:"добыча: больше находок"},
+  scout: {n:"Разведчик", i:"🔭", d:"разведка: шире обзор, быстрее путь"},
+  fight: {n:"Боец",      i:"🔪", d:"снижает риск вылазки"},
+  med:   {n:"Медик",     i:"⛑", d:"спасает раненых, лечит в лагере"},
+  eng:   {n:"Инженер",   i:"🔧", d:"на постройке: +выработка"},
+};
+const SK = Object.keys(PROF);
+const NAMES = ["Айдар","Дана","Ерлан","Асель","Тимур","Жанна","Нурлан","Карина","Бауыржан","Ольга","Сергей","Алия","Даурен","Милана",
+  "Арман","Гульнара","Руслан","Айгуль","Максим","Салтанат","Ержан","Вера","Кайрат","Динара","Олжас","Мадина","Игорь","Камила","Санжар","Лейла"];
+const STATUS = {idle:"в лагере", mission:"на вылазке", work:"на постройке", hurt:"ранен(а)"};
+const HUB_NAME = () => S.base ? "убежище" : "лагерь";
+const hub = () => S.base ? kij(S.base) : [START.i, START.j];
+const crewCap = () => { let n = 2 + (S.base ? 2 : 0); for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === "dorm" && bWorking(c)) n += 3 * c.b.lv; } return n; };
+const crewBy = id => (S.crew || []).find(m => m.id === id);
+function newSurvivor(prof) {
+  const p = prof || pick(SK), s = {}; SK.forEach(k => s[k] = 1); s[p] = rnd(2, 3); s[pick(SK)] += 1;
+  const used = new Set((S.crew || []).map(m => m.n)), name = pick(NAMES.filter(n => !used.has(n))) || pick(NAMES);
+  return {id: S.crewId = (S.crewId || 1) + 1, n: name, p, s, lv: 1, xp: 0, hp: 100, mo: 80, st: "idle"};
+}
+function joinCrew(m) {
+  if ((S.crew || []).length >= crewCap()) { toast("Нет места: постройте 🏘 Жилой блок или обустройте убежище"); return false; }
+  (S.crew = S.crew || []).push(m); log(`🙋 ${m.n} (${PROF[m.p].n}) присоединился(ась) к вам`, "g"); toast(`${m.n} в отряде`); return true;
+}
+const skTxt = m => SK.map(k => PROF[k].i + m.s[k]).join(" ");
+function crewXp(m, n) { m.xp += n; const need = 30 + m.lv * 25; if (m.xp >= need && m.lv < 10) { m.xp -= need; m.lv++; m.s[m.p]++; m.s[pick(SK)]++; log(`⬆ ${m.n} — уровень ${m.lv}`, "g"); } }
+
+/* ----- находка выживших на карте ----- */
+function lostTick(now) {
+  S.lost = (S.lost || []).filter(l => now < l.until);
+  if (S.lost.length >= 2 || (S.crew || []).length >= crewCap() + 1 || Math.random() > .04) return;
+  const c = randCellAt(4, 14, (a, b) => !safeCell(a, b) && !nearCamp(a, b)); if (!c) return;
+  S.lost.push({i: c[0], j: c[1], until: now + 45 * 60e3, m: newSurvivor()}); dirty = true;
+  if (S.lost.length === 1) log("📻 Сквозь помехи: кто-то просит о помощи — отметка 🙋 на карте", "a");
+}
+function lostOnEnter(i, j) {
+  const x = (S.lost || []).findIndex(l => l.i === i && l.j === j); if (x < 0) return;
+  const l = S.lost[x]; offerSurvivor(l.m, `${l.m.n} прячется здесь. ${PROF[l.m.p].n}: ${PROF[l.m.p].d}.`, () => S.lost.splice(S.lost.indexOf(l), 1));
+}
+let offerCb = null, offerM = null;
+function offerSurvivor(m, txt, onTake) {
+  offerM = m; offerCb = onTake;
+  openModal(`<h3>🙋 Выживший</h3><p>${txt}</p><p class="muted">Навыки: ${skTxt(m)}<br>Отряд: ${(S.crew || []).length}/${crewCap()}. Выжившим нужен паёк: 1 еда и 1 вода в час со склада.</p>
+    <div class="acts"><button class="btn acc" onclick="takeOffer()">Позвать в ${HUB_NAME()}</button><button class="btn" onclick="closeModal()">Оставить</button></div>`);
+}
+function takeOffer() { if (offerM && joinCrew(offerM)) { if (offerCb) offerCb(); gainXp(10); } offerM = offerCb = null; closeModal(); renderAll(); save(); }
+
+/* ----- паёк, мораль, лечение ----- */
+const FOOD_IT = ["can", "veg", "rusk"];
+function takeRation(k) { if (S.stash[k] > 0) { S.stash[k]--; if (!S.stash[k]) delete S.stash[k]; return true; } if (S.inv[k] > 0) { dec(k); return true; } return false; }
+let lastCrewTick = Date.now();
+function crewTick(now) {
+  if (now - lastCrewTick < 60e3) return; const h = (now - lastCrewTick) / 3600e3; lastCrewTick = now;
+  const crew = S.crew || []; if (!crew.length) return;
+  S.ration = (S.ration || 0) + crew.length * h;                // накопленный долг пайков
+  let hungry = 0;
+  while (S.ration >= 1) { S.ration--; const f = FOOD_IT.some(takeRation), w = takeRation("water"); if (!f || !w) hungry++; }
+  const medHeal = crew.some(m => m.p === "med" && m.st !== "mission") ? 2 : 1;
+  for (const m of [...crew]) {
+    if (m.st === "work" && !(S.cells[m.job] || {}).b) unassign(m);
+    if (hungry > 0) { m.mo -= 15; hungry--; } else m.mo = Math.min(100, m.mo + 10 * h);
+    if (m.st === "hurt") { m.hp = Math.min(100, m.hp + 25 * h * medHeal); if (m.hp >= 70) { m.st = "idle"; log(`⛑ ${m.n} поправился(ась)`, "g"); } }
+    if (m.mo <= 0) { crew.splice(crew.indexOf(m), 1); unassign(m); log(`😞 ${m.n} ушёл(ла): нечего есть`, "b"); toast(`${m.n} ушёл(ла) от голода`); }
+  }
+  if (hungry || crew.some(m => m.mo < 30)) { if (now - (S.hungerWarn || 0) > 20 * 60e3) { S.hungerWarn = now; log("🥫 Отряду не хватает еды и воды на складе", "b"); } }
+}
+
+/* ----- вылазки ----- */
+const MISSION = {
+  scav:  {n:"Добыча",   i:"🎒", d:"обыскать клетку и принести хабар на склад", maxD: 10},
+  scout: {n:"Разведка", i:"🔭", d:"разведать местность вокруг клетки, найти ловушки и тайники", maxD: 14},
+};
+let pickMode = null;    // выбор цели на карте: {type, ids}
+function missionCalc(type, ids, i, j) {
+  const team = ids.map(crewBy).filter(Boolean), [hi, hj] = hub(), d = cheb(i, j, hi, hj);
+  const sum = k => team.reduce((a, m) => a + m.s[k], 0), z = zoneFaction(i, j), h = new Date().getHours(), night = h >= 21 || h < 6;
+  const dur = Math.round((type === "scav" ? 4 : 3) + d * 0.8 / (1 + .08 * sum("scout")));     // минуты
+  const risk = Math.max(.03, Math.min(.85, (z ? .3 : .08) + (night ? .1 : 0) + d * .01 + (baseTrap(i, j) && !(S.cells[key(i, j)] || {}).td ? .1 : 0) - sum("fight") * .035 - (team.length - 1) * .04));
+  return {team, d, dur, risk, rolls: type === "scav" ? 1 + Math.ceil(sum("scav") / 2) : 0, radius: type === "scout" ? 2 + Math.floor(sum("scout") / 3) : 0};
+}
+function openSend() {
+  const idle = (S.crew || []).filter(m => m.st === "idle");
+  if (!idle.length) { toast("Нет свободных людей"); return; }
+  openModal(`<h3>🚩 Новая вылазка</h3><p class="muted">Выберите людей и задачу, затем коснитесь клетки на карте. Вылазки идут от: ${HUB_NAME()}.</p>
+    ${idle.map(m => `<label class="row" style="cursor:pointer"><div class="n">${PROF[m.p].i} ${m.n} · ур. ${m.lv}<small>${skTxt(m)} · HP ${Math.round(m.hp)} · мораль ${Math.round(m.mo)}</small></div><input type="checkbox" class="sendc" value="${m.id}" ${idle.length === 1 ? "checked" : ""}></label>`).join("")}
+    <div class="acts">${Object.entries(MISSION).map(([t, M]) => `<button class="btn acc" onclick="startPick('${t}')">${M.i} ${M.n}<small>${M.d}, до ${M.maxD} кл.</small></button>`).join("")}
+    <button class="btn" onclick="closeModal()">Отмена</button></div>`);
+}
+function startPick(type) {
+  const ids = [...document.querySelectorAll(".sendc:checked")].map(e => +e.value); if (!ids.length) { toast("Отметьте хотя бы одного"); return; }
+  pickMode = {type, ids}; closeModal(); if (cam.s > .25 || cam.s < .05) cam.s = .09; centerOnHub(); toast(`${MISSION[type].i} Коснитесь клетки для «${MISSION[type].n}» (до ${MISSION[type].maxD} кл.)`); renderAll();
+}
+function centerOnHub() { const [hi, hj] = hub(); [cam.x, cam.y] = cellCenter(hi, hj); dirty = true; }
+function pickTarget(i, j) {
+  const pm = pickMode, M = MISSION[pm.type], [hi, hj] = hub(), d = cheb(i, j, hi, hj);
+  if (d > M.maxD) { toast(`Слишком далеко от ${HUB_NAME() === "лагерь" ? "лагеря" : "убежища"}: ${d} кл., максимум ${M.maxD}`); return; }
+  if (pm.type === "scav" && !(S.cells[key(i, j)] || {}).e) { toast("Для добычи нужна разведанная клетка — сначала разведка"); return; }
+  const r = missionCalc(pm.type, pm.ids, i, j);
+  openModal(`<h3>${M.i} ${M.n}: ${cellBase(i, j).n}</h3><p class="muted">${describe(i, j)} · ${d} кл. от ${HUB_NAME() === "лагерь" ? "лагеря" : "убежища"}</p>
+    <p>Отряд: ${r.team.map(m => PROF[m.p].i + m.n).join(", ")}<br>Время: <b>${r.dur} мин</b> · риск: <b style="color:${r.risk > .4 ? "var(--bad)" : r.risk > .2 ? "var(--acc)" : "var(--good)"}">${Math.round(r.risk * 100)}%</b>
+    ${pm.type === "scav" ? `<br>Находок: до ${r.rolls}` : `<br>Радиус разведки: ${r.radius} кл.`}</p>
+    <p class="muted">Риск снижают бойцы и численность, повышают зоны банд и ИИ, ночь, ловушки, дальность. Медик в отряде может спасти раненого.</p>
+    <div class="acts"><button class="btn acc" onclick="launchMission(${i},${j})">Отправить</button><button class="btn" onclick="pickMode=null;closeModal();renderAll()">Отмена</button></div>`);
+}
+function launchMission(i, j) {
+  const pm = pickMode; if (!pm) return; const r = missionCalc(pm.type, pm.ids, i, j); pickMode = null; closeModal();
+  if (r.team.some(m => m.st !== "idle")) { toast("Кто-то уже занят"); return; }
+  const now = Date.now(); r.team.forEach(m => { m.st = "mission"; });
+  (S.missions = S.missions || []).push({type: pm.type, i, j, ids: pm.ids, t0: now, end: now + r.dur * 60e3, risk: r.risk, rolls: r.rolls, radius: r.radius});
+  log(`🚩 ${MISSION[pm.type].n}: ${r.team.map(m => m.n).join(", ")} → ${cellBase(i, j).n} (${r.dur} мин)`, "a"); renderAll(); save();
+}
+function resolveMission(ms) {
+  const team = ms.ids.map(crewBy).filter(Boolean), M = MISSION[ms.type], c = C(key(ms.i, ms.j)), got = {}, notes = [];
+  if (Math.random() < ms.risk) {          // стычка или ловушка
+    const v = pick(team), dmg = rnd(30, 65); v.hp -= dmg;
+    if (v.hp <= 0) {
+      if (team.some(m => m.p === "med" && m !== v) && Math.random() < .6) { v.hp = 15; v.st = "hurt"; notes.push(`${v.n} тяжело ранен(а), медик спас`); }
+      else { S.crew.splice(S.crew.indexOf(v), 1); notes.push(`💀 ${v.n} погиб(ла)`); toast(`💀 ${v.n} погиб(ла) на вылазке`); }
+    } else { v.st = "hurt"; notes.push(`${v.n} ранен(а) (−${dmg} HP)`); }
+    team.forEach(m => m.mo -= 10);
+  }
+  if (ms.type === "scav") {
+    const table = LOOT[cellBase(ms.i, ms.j).t] || LOOT.res, tot = table.reduce((a, x) => a + x[1], 0);
+    for (let n = 0; n < ms.rolls; n++) { let v = Math.random() * tot; for (const [it, w, mn, mx] of table) { if ((v -= w) <= 0) { if (it !== "bike") got[it] = (got[it] || 0) + rnd(mn, mx); break; } } }
+    for (const it in got) S.stash[it] = (S.stash[it] || 0) + got[it];
+    c.e = 1; c.lc = Math.min(3, (c.lc || 0) + 1); c.ls = Date.now();
+  } else {
+    reveal(ms.i, ms.j, ms.radius, true);
+    if (Math.random() < .3) { const a = ms.i + rnd(-ms.radius, ms.radius), b = ms.j + rnd(-ms.radius, ms.radius); if (inGrid(a, b) && inCity[b * GW + a]) { (S.caches = S.caches || []).push({i: a, j: b, until: Date.now() + 60 * 60e3}); notes.push("найден 🧰 тайник"); } }
+    if (Math.random() < .15 && (S.lost || []).length < 3) { const a = ms.i + rnd(-ms.radius, ms.radius), b = ms.j + rnd(-ms.radius, ms.radius); if (inGrid(a, b) && inCity[b * GW + a]) { S.lost.push({i: a, j: b, until: Date.now() + 45 * 60e3, m: newSurvivor()}); notes.push("замечен 🙋 выживший"); } }
+  }
+  team.forEach(m => { if (S.crew.includes(m) && m.st === "mission") m.st = "idle"; crewXp(m, ms.type === "scav" ? 8 : 6); });
+  const loot = Object.entries(got).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ");
+  log(`${M.i} ${M.n} у «${cellBase(ms.i, ms.j).n}» завершена${loot ? ": на склад — " + loot : ms.type === "scout" ? ": разведано " + (2 * ms.radius + 1) + "×" + (2 * ms.radius + 1) + " кл." : ": пусто"}${notes.length ? " · " + notes.join(", ") : ""}`, notes.some(n => n.includes("💀")) ? "b" : "g");
+  dirty = true;
+}
+function missionTick(now) {
+  const done = (S.missions || []).filter(ms => now >= ms.end); if (!done.length) return;
+  S.missions = S.missions.filter(ms => now < ms.end); done.forEach(resolveMission); renderAll(); save();
+}
+
+/* ----- работники на постройках ----- */
+function unassign(m) { for (const k in S.cells) { const b = S.cells[k].b; if (b && b.wk) b.wk = b.wk.filter(id => id !== m.id); } if (m.st === "work") m.st = "idle"; delete m.job; }
+const workers = c => (c && c.b && c.b.wk || []).map(crewBy).filter(m => m && m.st === "work");
+const workMult = c => { const w = workers(c); return 1 + w.length * .2 + w.reduce((a, m) => a + m.s.eng, 0) * .05; };
+function assignWorker(id) {
+  const c = S.cells[key(S.p.i, S.p.j)], m = crewBy(id); if (!c || !c.b || !m || m.st !== "idle") return;
+  if (workers(c).length >= 2) { toast("Максимум 2 работника"); return; }
+  (c.b.wk = c.b.wk || []).push(id); m.st = "work"; m.job = key(S.p.i, S.p.j); log(`🔧 ${m.n} работает: ${BUILD[c.b.t].n}`, "g"); save(); openBuild();
+}
+function freeWorker(id) { const m = crewBy(id); if (m) unassign(m); save(); openBuild(); }
+
+/* ----- вкладка «Люди» ----- */
+function renderCrew(el) {
+  const crew = S.crew || [], ms = S.missions || [], now = Date.now();
+  const food = FOOD_IT.reduce((a, k) => a + (S.stash[k] || 0) + (S.inv[k] || 0), 0), water = (S.stash.water || 0) + (S.inv.water || 0);
+  el.innerHTML = `<div class="dist"><div class="h"><span>Отряд ${crew.length}/${crewCap()}</span><span class="muted">еда ${food} · вода ${water} · хватит на ${crew.length ? Math.floor(Math.min(food, water) / crew.length) : "∞"} ч</span></div></div>
+    <div class="grid2" style="margin:6px 0"><button class="btn acc" ${crew.some(m => m.st === "idle") ? "" : "disabled"} onclick="openSend()">🚩 Вылазка<small>добыча, разведка</small></button>
+    <button class="btn" onclick="centerOnHub()">🏠 ${S.base ? "Убежище" : "Лагерь"}<small>${S.base ? "вылазки идут отсюда" : "обустройте убежище: +2 места"}</small></button></div>
+    ${pickMode ? `<p style="color:var(--acc)">Выбор цели: коснитесь клетки на карте · <a href="#" onclick="pickMode=null;renderAll();return false">отмена</a></p>` : ""}
+    ${ms.length ? `<b>Вылазки</b>` + ms.map(m => `<div class="row"><div class="n">${MISSION[m.type].i} ${MISSION[m.type].n} → ${cellBase(m.i, m.j).n}<small>${m.ids.map(id => (crewBy(id) || {}).n).filter(Boolean).join(", ")} · ещё ${Math.max(0, Math.ceil((m.end - now) / 60e3))} мин · риск ${Math.round(m.risk * 100)}%</small></div></div>`).join("") : ""}
+    <b style="display:block;margin-top:8px">Люди</b>${crew.map(m => `<div class="row"><div class="n">${PROF[m.p].i} ${m.n} · ${PROF[m.p].n} · ур. ${m.lv}<small>${skTxt(m)}</small><small>${STATUS[m.st]}${m.st === "work" && m.job ? ": " + BUILD[(S.cells[m.job].b || {}).t]?.n : ""} · HP ${Math.round(m.hp)} · мораль <span style="color:${m.mo < 30 ? "var(--bad)" : "inherit"}">${Math.round(m.mo)}</span></small></div>${m.st === "work" ? `<button class="btn mini" onclick="unassign(crewBy(${m.id}));renderAll();save()">Снять</button>` : ""}</div>`).join("") || `<p class="muted">Пока никого. Ищите 🙋 на карте и слушайте рацию.</p>`}
+    <p class="muted">Выжившие едят 1 еду и 1 воду в час со склада (или из рюкзака). Голодные теряют мораль и уходят. Ставьте людей на постройки (окно постройки → «Работники»): +20% выработки каждый, инженер — больше.</p>`;
 }
 function incomeOf(k, now) {
   const c = S.cells[k]; if (!c || !c.o) return 0;
@@ -1957,7 +2138,8 @@ function renderPane() {
     el.innerHTML = story + `<b>Постройки</b>${bl || '<p class="muted">Нет. Захватите клетку и нажмите 🏗 Построить.</p>'}<b style="display:block;margin-top:10px">Задания</b>${qs || '<p class="muted">Нет. Возьмите через 📻 Рацию.</p>'}<b style="display:block;margin:10px 0 6px">Районы</b>` + DISTRICTS.map((d, k) => { const pc = distPct(k); return `<div class="dist"><div class="h"><span>${(S.dist || {})[k] ? "★ " : ""}${d.n}</span><span class="muted">${distCount(k)}/${d.total} · ${pc}%</span></div><i><s style="width:${Math.min(100, pc / 60 * 100)}%"></s></i></div>`; }).join("") +
       `<p class="muted">Клеток всего: ${Object.values(S.cells).filter(c => c.o).length} · доход к сбору: ${pendingIncome()} (собирается в убежище, 1 ед. / 10 мин с клетки, макс ${YIELD_CAP}).</p><p class="muted">Район ваш при 60% клеток. Зоны банд и ИИ можно захватывать только после зачистки их центра. Неукреплённые клетки у вражеских зон теряются при набегах.</p>
        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn mini acc" onclick="openSaveIO()">💾 Сохранение: файл</button><button class="btn bad mini" onclick="confirmReset()">Начать заново</button></div>`;
-  } else {
+  } else if (tab === "crew") renderCrew(el);
+  else {
     el.innerHTML = `<div class="log">${S.log.map(([t, m, c]) => `<div><span class="tm">${t}</span><span class="${c}">${m}</span></div>`).join("") || '<p class="muted">Пусто</p>'}</div>`;
   }
 }
@@ -2018,9 +2200,9 @@ function frame() {
   if (now - lastTick >= 1000) {
     const dt = (now - lastTick) / 1000; lastTick = now;
     if (!fight) survive(dt, false);
-    populate(); stepEnts(); raids(); buildTick(now); mktTick(now); bldEventTick(now); cacheTick(now); huntTick(now); dirty = true; traderTick(now); eventTick(now); renderHud();
+    populate(); stepEnts(); raids(); buildTick(now); mktTick(now); bldEventTick(now); cacheTick(now); huntTick(now); lostTick(now); crewTick(now); missionTick(now); dirty = true; traderTick(now); eventTick(now); renderHud();
     if (S.pendingPerks > 0 && !fight && document.getElementById("modal").style.display !== "flex") openPerks();
-    if (tab === "act" && !busy) renderPane();
+    if ((tab === "act" || tab === "crew") && !busy && document.getElementById("modal").style.display !== "flex") renderPane();
     if (now - lastSave > 10000) { lastSave = now; save(); }
   }
   if (dirty) draw();
@@ -2035,6 +2217,8 @@ centerOnPlayer(); cam.s = 0.12;
 const firstRun = !S.log.length;
 if (firstRun) intro();
 storyStart();
+if (!S.crewGift) { S.crewGift = 1; const m = newSurvivor("scav"); m.n = "Айдар"; joinCrew(m);
+  log("Сауле: «Возьми Айдара, он знает район. Отправляй его за хабаром — вкладка «Люди»»", "a"); }
 reveal(S.p.i, S.p.j, 1, false);
 if (S.gps) { S.gps = false; setGps(true); }
 renderAll();
