@@ -95,6 +95,7 @@ canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;di
       <button data-t="crew">Люди</button>
       <button data-t="dist">Цели</button>
       <button data-t="log">Журнал</button>
+      <button data-t="dev" id="tabDev" style="display:none">🛠</button>
     </div>
     <div id="pane"></div>
   </div>
@@ -209,6 +210,13 @@ const POIS = [
 ];
 const POI_ICON = {landmark:"🏛",market:"🏪",mall:"🏬",tower:"📡",power:"🏭",station:"🚉",park:"🌳",hospital:"🏥",police:"🚓",military:"🎖",hideout:"☠",camp:"🏫",metro:"Ⓜ",highrise:"🏢"};
 const POI_BY = id => POIS.find(p => p.id === id);
+/* Правки карты из режима разработчика (localStorage, отдельно от сохранения): добавленные объекты — в конец POIS */
+const DEV_KEY = "almaty-sboy-dev";
+const DEV = (() => { const e = {add: [], move: {}, hide: [], cell: {}}; try { return Object.assign(e, JSON.parse(localStorage.getItem(DEV_KEY) || "{}")); } catch (x) { return e; } })();
+const POIS_BASE = POIS.length;
+for (const [k, ll] of Object.entries(DEV.move)) if (POIS[k]) POIS[k].ll = ll;
+DEV.hide.forEach(k => { if (POIS[k] && !POIS[k].id) POIS[k].hidden = true; });
+DEV.add.forEach(p => POIS.push(Object.assign({}, p, {dev: 1})));
 const isLake = p => p && p.n === "Озеро Сайран";
 const CELL_TYPES = [ // процедурные клетки
   {t:"res",n:"Жилой квартал",p:.52},{t:"shop",n:"Магазин",p:.15},{t:"pharm",n:"Аптека",p:.07},
@@ -305,13 +313,14 @@ function pip(x, y, poly) {
     }
   }
   if (LU) POIS.forEach(p => {   // логова банд — в ближайшую промзону или гаражи
-    if (p.t !== "hideout") return; const [i0, j0] = cellOf(...merc(p.ll[0], p.ll[1]));
+    if (p.t !== "hideout" || p.dev || DEV.move[POIS.indexOf(p)]) return; const [i0, j0] = cellOf(...merc(p.ll[0], p.ll[1]));
     for (let r = 0; r <= 16; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
       if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue; const a = i0 + di, b = j0 + dj;
       if (inGrid(a, b) && inCity[b * GW + a] && "IG".includes(luOf(a, b))) { p.ll = unmerc(...cellCenter(a, b)); r = 99; dj = di = 99; }
     }
   });
   POIS.forEach((p, k) => {
+    if (p.hidden) { p.i = p.j = -9999; return; }
     const [x, y] = merc(p.ll[0], p.ll[1]); const [i, j] = cellOf(x, y);
     p.i = i; p.j = j; p.mx = x; p.my = y; poiAt.set(key(i, j), k);
     if (p.f) {
@@ -334,6 +343,7 @@ function pip(x, y, poly) {
 function cellBase(i, j) {
   const k = key(i, j);
   if (poiAt.has(k)) { const p = POIS[poiAt.get(k)]; return {t: p.t, n: p.n, poi: p}; }
+  const dv = DEV.cell[k]; if (dv) return {t: dv.t, n: dv.n};
   const o = osmCell.get(k); if (o) return {t: o.t, n: o.n + (o.cnt > 1 ? " +" + (o.cnt - 1) : ""), osm: true};
   const r = hash(i, j, 1); let acc = 0;
   const mi = microOf[j * GW + i], lc = luOf(i, j);
@@ -716,6 +726,8 @@ function draw() {
     ctx.font = Math.max(12, Math.min(22, cs * .5)) + "px system-ui";
     ctx.fillText(ENEMY[e.type].i, ex, ey);
   });
+  if (devTool && devTool.sel != null && POIS[devTool.sel]) { const q = POIS[devTool.sel], [qx, qy] = toScr(...cellCenter(q.i, q.j));
+    ctx.strokeStyle = "#4fb3e8"; ctx.lineWidth = 3; ctx.setLineDash([4, 3]); ctx.strokeRect(qx - cs / 2, qy - cs / 2, cs, cs); ctx.setLineDash([]); }
   // реальная позиция GPS и точность
   if (S.gps && gpsFix && Date.now() - gpsFix.t < 60e3) { const [gx, gy] = toScr(gpsFix.x, gpsFix.y), ar = gpsFix.acc / Math.cos(LAT0 * Math.PI / 180) * cam.s;
     ctx.beginPath(); ctx.arc(gx, gy, Math.max(4, ar), 0, 7); ctx.fillStyle = "rgba(79,179,232,.12)"; ctx.fill(); ctx.strokeStyle = "rgba(79,179,232,.6)"; ctx.lineWidth = 1; ctx.stroke();
@@ -795,6 +807,7 @@ function onTap(sx, sy) {
   const [mx, my] = toMerc(sx, sy); const [i, j] = cellOf(mx, my);
   if (!inGrid(i, j)) return;
   if (!inCity[j * GW + i]) { if (luOf(i, j) === "W") toast("Там вода"); return; }
+  if (devTool && devOn()) { devTap(i, j); return; }
   if (pickMode) { pickTarget(i, j); return; }
   if (i === S.p.i && j === S.p.j) { setTab("act"); return; }
   const c = S.cells[key(i, j)];
@@ -1568,6 +1581,119 @@ function renderCrew(el) {
     <b style="display:block;margin-top:8px">Люди</b>${crew.map(m => `<div class="row"><div class="n">${PROF[m.p].i} ${m.n} · ${PROF[m.p].n} · ур. ${m.lv}<small>${skTxt(m)}</small><small>${STATUS[m.st]}${m.st === "work" && m.job ? ": " + BUILD[(S.cells[m.job].b || {}).t]?.n : ""} · HP ${Math.round(m.hp)} · мораль <span style="color:${m.mo < 30 ? "var(--bad)" : "inherit"}">${Math.round(m.mo)}</span></small></div>${m.st === "work" ? `<button class="btn mini" onclick="unassign(crewBy(${m.id}));renderAll();save()">Снять</button>` : ""}</div>`).join("") || `<p class="muted">Пока никого. Ищите 🙋 на карте и слушайте рацию.</p>`}
     <p class="muted">Выжившие едят 1 еду и 1 воду в час со склада (или из рюкзака). Голодные теряют мораль и уходят. Ставьте людей на постройки (окно постройки → «Работники»): +20% выработки каждый, инженер — больше.</p>`;
 }
+/* ===== РЕЖИМ РАЗРАБОТЧИКА: расстановка объектов, тип клеток, спавн, читы ===== */
+const devOn = () => !!S.dev || /[?&]dev\b/.test(location.search);
+let devTool = null;   // {t, ...параметры}
+const DEV_TYPES = ["camp","market","hideout","mall","tower","power","station","park","hospital","police","military","metro","highrise","landmark"];
+const DEV_TNAME = {camp:"Лагерь выживших",market:"Рынок",hideout:"Логово банды",mall:"ТЦ",tower:"Вышка",power:"Электростанция",station:"Станция",park:"Парк",
+  hospital:"Больница",police:"Полиция",military:"Военный объект",metro:"Метро",highrise:"Высотка",landmark:"Достопримечательность"};
+const DEV_CELLS = [["res","Жилой квартал"],["private","Частный сектор"],["shop","Магазин"],["pharm","Аптека"],["garage","Гаражи"],["industrial","Промзона"],
+  ["office","Офисы"],["park","Сквер"],["cemetery","Кладбище"],["empty","Пустырь"],["military","Военная часть"],["hospital","Больница"],["police","Полиция"]];
+function devSave(reload) {
+  localStorage.setItem(DEV_KEY, JSON.stringify(DEV));
+  if (reload) { sessionStorage.setItem("devView", JSON.stringify({x: cam.x, y: cam.y, s: cam.s, tool: devTool && Object.assign({}, devTool, {sel: null})})); save(); location.reload(); }
+}
+function devPick(t) {
+  const v = id => (document.getElementById(id) || {}).value;
+  devTool = {t};
+  if (t === "add") Object.assign(devTool, {pt: v("devPt") || "market", f: v("devPf") || "", n: (v("devPn") || "").trim()});
+  if (t === "cell") { const [ct, cn] = (v("devCt") || "res|Жилой квартал").split("|"); Object.assign(devTool, {ct, cn: (v("devCn") || "").trim() || cn}); }
+  if (t === "enemy") devTool.et = v("devEt") || "bandit";
+  if (t === "reveal") devTool.r = +(v("devRr") || 6);
+  toast("🛠 Инструмент: " + DEV_TOOLS[t] + " — коснитесь клетки"); renderAll();
+}
+const DEV_TOOLS = {tp:"Телепорт", add:"Поставить объект", move:"Переместить объект", del:"Убрать объект", cell:"Тип клетки", own:"Сделать клетку своей",
+  enemy:"Враг", cache:"Тайник", surv:"Выживший", reveal:"Открыть область"};
+function devTap(i, j) {
+  const T = devTool, k = key(i, j), ll = unmerc(...cellCenter(i, j)).map(v => +v.toFixed(5)), idx = poiAt.get(k);
+  switch (T.t) {
+    case "tp": if (fight) return; travel = null; busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); break;
+    case "add": {
+      const p = {n: T.n || DEV_TNAME[T.pt], t: T.pt, ll}; if (T.f) p.f = T.f; if (T.f && T.pt === "market") p.boss = "Главарь рынка";
+      if (idx !== undefined) { toast("Здесь уже объект: " + POIS[idx].n); return; }
+      DEV.add.push(p); log(`🛠 Поставлено: ${p.n}`, "a"); devSave(true); return; }
+    case "move":
+      if (T.sel === undefined || T.sel === null) { if (idx === undefined) { toast("Здесь нет объекта"); return; } T.sel = idx; toast(`Выбрано: ${POIS[idx].n}. Коснитесь новой клетки`); dirty = true; return; }
+      if (idx !== undefined) { toast("Клетка занята: " + POIS[idx].n); return; }
+      if (T.sel >= POIS_BASE) DEV.add[T.sel - POIS_BASE].ll = ll; else DEV.move[T.sel] = ll;
+      log(`🛠 Перемещено: ${POIS[T.sel].n}`, "a"); T.sel = null; devSave(true); return;
+    case "del":
+      if (idx === undefined) { toast("Здесь нет объекта"); return; }
+      if (idx >= POIS_BASE) DEV.add.splice(idx - POIS_BASE, 1);
+      else { if (POIS[idx].id) { toast("Сюжетный объект можно только переместить"); return; } DEV.hide.push(idx); }
+      log(`🛠 Убрано: ${POIS[idx].n}`, "a"); devSave(true); return;
+    case "cell":
+      if (T.ct === "reset") delete DEV.cell[k]; else DEV.cell[k] = {t: T.ct, n: T.cn};
+      devSave(false); toast(T.ct === "reset" ? "Тип клетки сброшен" : "Клетка: " + T.cn); break;
+    case "own": { const c = C(k); c.e = 1; if (c.o) delete c.o; else { c.o = 1; c.oc = c.oy = Date.now(); } break; }
+    case "enemy": { const e = spawnEnt(T.et, i, j); e.dev = 1; break; }
+    case "cache": (S.caches = S.caches || []).push({i, j, until: Date.now() + 60 * 60e3}); break;
+    case "surv": (S.lost = S.lost || []).push({i, j, until: Date.now() + 45 * 60e3, m: newSurvivor()}); break;
+    case "reveal": reveal(i, j, T.r || 6, true); break;
+  }
+  dirty = true; renderAll(); save();
+}
+function devGive() {
+  Object.entries({parts: 40, batt: 12, rebar: 8, can: 10, water: 10, veg: 6, ammo: 30, band: 6, medkit: 2, akb: 2, fuel: 4}).forEach(([k, n]) => S.stash[k] = (S.stash[k] || 0) + n);
+  S.money += 300; log("🛠 Выдан набор на склад и 300 💰", "a"); renderAll(); save();
+}
+function devHeal() { Object.assign(S.p, {hp: 100, food: 100, water: 100, en: 100}); (S.crew || []).forEach(m => { m.hp = 100; m.mo = 100; if (m.st === "hurt") m.st = "idle"; }); renderAll(); save(); }
+function devFinish() {
+  const now = Date.now(); let n = 0;
+  for (const k in S.cells) { const b = S.cells[k].b; if (b && b.ready > now) { b.y -= b.ready - now; b.ready = now; n++; } }
+  (S.missions || []).forEach(m => { m.end = now; n++; }); log(`🛠 Завершено мгновенно: ${n}`, "a"); renderAll(); save();
+}
+function devFF(min) {   // промотать время: постройки и цеха копят продукцию, износ тоже идёт
+  const d = min * 60e3;
+  for (const k in S.cells) { const b = S.cells[k].b; if (!b) continue; b.ready -= d; b.y -= d; if (b.w) b.w -= d; }
+  (S.missions || []).forEach(m => { m.end -= d; m.t0 -= d; }); log(`🛠 Промотано ${min} мин`, "a"); renderAll(); save();
+}
+function devClearEnemies() { ents = []; dirty = true; toast("Враги убраны"); }
+function devExport() {
+  const txt = JSON.stringify(DEV, null, 1);
+  const done = () => toast("Правки скопированы — пришлите их, чтобы я перенёс их в игру насовсем");
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done, () => devShowText(txt)); else devShowText(txt);
+}
+function devShowText(txt) { openModal(`<h3>Правки карты</h3><textarea readonly style="width:100%;height:40vh;font-size:11px" onfocus="this.select()">${txt.replace(/</g, "&lt;")}</textarea><div class="acts"><button class="btn" onclick="closeModal()">Готово</button></div>`); }
+function devImport() {
+  openModal(`<h3>Загрузить правки</h3><textarea id="devTxt" style="width:100%;height:35vh;font-size:11px"></textarea><div class="acts"><button class="btn acc" onclick="devDoImport()">Загрузить</button><button class="btn" onclick="closeModal()">Отмена</button></div>`);
+}
+function devDoImport() {
+  try { const d = JSON.parse(document.getElementById("devTxt").value); if (!d || typeof d !== "object") throw 0;
+    localStorage.setItem(DEV_KEY, JSON.stringify(Object.assign({add: [], move: {}, hide: [], cell: {}}, d))); save(); location.reload(); }
+  catch (e) { toast("Неверный формат"); }
+}
+function devReset() {
+  if (!confirm("Сбросить все правки карты (объекты и типы клеток)? Прогресс игры останется.")) return;
+  localStorage.removeItem(DEV_KEY); save(); location.reload();
+}
+function devToggle() { S.dev = !S.dev; if (!S.dev) devTool = null; save(); renderAll(); if (S.dev) setTab("dev"); else if (tab === "dev") setTab("act"); toast(S.dev ? "🛠 Режим разработчика включён" : "Режим разработчика выключен"); }
+function renderDev(el) {
+  const sel = (id, opts, cur) => `<select id="${id}" style="background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px;max-width:100%">${opts.map(([v, n]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+  const T = devTool || {}, b = (t, small) => `<button class="btn ${T.t === t ? "acc" : ""}" onclick="devPick('${t}')">${DEV_TOOLS[t]}<small>${small}</small></button>`;
+  const nAdd = DEV.add.length, nMove = Object.keys(DEV.move).length, nHide = DEV.hide.length, nCell = Object.keys(DEV.cell).length;
+  el.innerHTML = `<div class="dist"><div class="h"><span>🛠 Режим разработчика</span><span class="muted">${T.t ? "инструмент: " + DEV_TOOLS[T.t] + (T.sel != null ? " · выбрано: " + POIS[T.sel].n : "") : "выберите инструмент"}</span></div></div>
+    ${T.t ? `<button class="btn mini" style="margin:4px 0;display:block" onclick="devTool=null;renderAll()">✕ Снять инструмент (обычные тапы)</button>` : ""}
+    <b style="display:block;margin-top:6px">Объекты карты</b><span class="muted">(сохраняются на этом устройстве, страница перезагрузится)</span>
+    <div class="row" style="flex-wrap:wrap">${sel("devPt", DEV_TYPES.map(t => [t, (POI_ICON[t] || "") + " " + DEV_TNAME[t]]), T.pt || "market")}
+      ${sel("devPf", [["", "без фракции"], ["gang", "банда (зона, охрана)"], ["ai", "ИИ (зона, турель)"]], T.f || "")}
+      <input id="devPn" placeholder="название (необязательно)" value="${(T.n || "").replace(/"/g, "&quot;")}" style="flex:1;min-width:140px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px"></div>
+    <div class="grid2">${b("add", "тип, фракция и имя выше")}${b("move", "тап по объекту, затем по новой клетке")}${b("del", "сюжетные нельзя")}${b("tp", "переместить игрока")}</div>
+    <b style="display:block;margin-top:8px">Клетки</b>
+    <div class="row" style="flex-wrap:wrap">${sel("devCt", DEV_CELLS.map(([t, n]) => [t + "|" + n, n]).concat([["reset|", "↺ сбросить к данным OSM"]]), T.ct ? T.ct + "|" + T.cn : "res|Жилой квартал")}
+      <input id="devCn" placeholder="своё название" style="flex:1;min-width:120px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px"></div>
+    <div class="grid2">${b("cell", "тип и название выше")}${b("own", "захват / снять захват")}
+      <div>${sel("devRr", [["3", "радиус 3"], ["6", "радиус 6"], ["12", "радиус 12"], ["25", "радиус 25"]], String(T.r || 6))}</div>${b("reveal", "снять туман")}</div>
+    <b style="display:block;margin-top:8px">Спавн</b>
+    <div class="row">${sel("devEt", Object.entries(ENEMY).map(([k, E]) => [k, E.i + " " + E.n]), T.et || "bandit")}</div>
+    <div class="grid2">${b("enemy", "тип выше")}${b("cache", "🧰 на клетку")}${b("surv", "🙋 на клетку")}<button class="btn" onclick="devClearEnemies()">Убрать всех врагов<small>до следующего появления</small></button></div>
+    <b style="display:block;margin-top:8px">Читы</b>
+    <div class="grid2"><button class="btn" onclick="devGive()">Набор ресурсов<small>на склад + 300 💰</small></button><button class="btn" onclick="devHeal()">Здоровье и сытость<small>игрок и отряд</small></button>
+      <button class="btn" onclick="devFinish()">Завершить стройки и вылазки<small>мгновенно</small></button><button class="btn" onclick="devFF(60)">Промотать 1 час<small>постройки, цеха, износ</small></button></div>
+    <b style="display:block;margin-top:8px">Правки карты</b> <span class="muted">добавлено ${nAdd} · перемещено ${nMove} · убрано ${nHide} · клеток ${nCell}</span>
+    <div class="grid2"><button class="btn acc" onclick="devExport()">Скопировать правки<small>пришлите — внесу в игру для всех</small></button><button class="btn" onclick="devImport()">Загрузить правки<small>из текста</small></button>
+      <button class="btn bad" onclick="devReset()">Сбросить правки</button><button class="btn" onclick="devToggle()">Выключить режим</button></div>`;
+}
 function incomeOf(k, now) {
   const c = S.cells[k]; if (!c || !c.o) return 0;
   return Math.min(YIELD_CAP, Math.floor((now - (c.oy || c.oc || now)) / YIELD_MS));
@@ -2137,8 +2263,9 @@ function renderPane() {
       return `<div class="row"><div class="n">${B.i} ${B.n} · ур. ${bLv(c)}<small>${cellBase(i, j).n} · ${cheb(i, j, p.i, p.j)} кл. от вас · ${st}</small><small>состояние <span style="color:${cd >= 50 ? "var(--good)" : cd >= 20 ? "var(--acc)" : "var(--bad)"}">${cd}%</span>${B.depo ? " · залежь " + pct(depoQ(i, j, B.depo)) : ""}</small></div>${rm ? `<button class="btn mini" ${S.money >= rm ? "" : "disabled"} onclick="repairRemote('${k}')">🔧 ${rm} 💰</button>` : ""}</div>`; }).join("");
     el.innerHTML = story + `<b>Постройки</b>${bl || '<p class="muted">Нет. Захватите клетку и нажмите 🏗 Построить.</p>'}<b style="display:block;margin-top:10px">Задания</b>${qs || '<p class="muted">Нет. Возьмите через 📻 Рацию.</p>'}<b style="display:block;margin:10px 0 6px">Районы</b>` + DISTRICTS.map((d, k) => { const pc = distPct(k); return `<div class="dist"><div class="h"><span>${(S.dist || {})[k] ? "★ " : ""}${d.n}</span><span class="muted">${distCount(k)}/${d.total} · ${pc}%</span></div><i><s style="width:${Math.min(100, pc / 60 * 100)}%"></s></i></div>`; }).join("") +
       `<p class="muted">Клеток всего: ${Object.values(S.cells).filter(c => c.o).length} · доход к сбору: ${pendingIncome()} (собирается в убежище, 1 ед. / 10 мин с клетки, макс ${YIELD_CAP}).</p><p class="muted">Район ваш при 60% клеток. Зоны банд и ИИ можно захватывать только после зачистки их центра. Неукреплённые клетки у вражеских зон теряются при набегах.</p>
-       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn mini acc" onclick="openSaveIO()">💾 Сохранение: файл</button><button class="btn bad mini" onclick="confirmReset()">Начать заново</button></div>`;
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="btn mini acc" onclick="openSaveIO()">💾 Сохранение: файл</button><button class="btn mini" onclick="devToggle()">🛠 ${S.dev ? "Выключить разработчика" : "Режим разработчика"}</button><button class="btn bad mini" onclick="confirmReset()">Начать заново</button></div>`;
   } else if (tab === "crew") renderCrew(el);
+  else if (tab === "dev") { if (devOn()) renderDev(el); else setTab("act"); }
   else {
     el.innerHTML = `<div class="log">${S.log.map(([t, m, c]) => `<div><span class="tm">${t}</span><span class="${c}">${m}</span></div>`).join("") || '<p class="muted">Пусто</p>'}</div>`;
   }
@@ -2179,7 +2306,7 @@ function confirmReset() {
   openModal(`<h3>Начать заново?</h3><p class="muted">Прогресс, территории и рюкзак будут удалены.</p><div class="acts"><button class="btn bad" onclick="doReset()">Да, сбросить</button><button class="btn" onclick="closeModal()">Отмена</button></div>`);
 }
 function doReset() { setGps(false); S = newState(); ents = []; closeModal(); intro(); enterCell(S.p.i, S.p.j); centerOnPlayer(); }
-function renderAll() { renderHud(); renderPane(); dirty = true; }
+function renderAll() { document.getElementById("tabDev").style.display = devOn() ? "" : "none"; renderHud(); renderPane(); dirty = true; }
 function intro() {
   log("Сбой. Городская ИИ-сеть «Тұмар» захватила энергосистему. ТЭЦ горят, связь мертва.", "a");
   openModal(`<h3>Алматы: Сбой</h3><p>Городская ИИ-сеть вышла из-под контроля. Дроны патрулируют улицы, на рынках правят банды, на дорогах ловушки.</p>
@@ -2214,6 +2341,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) save(
 /* ================== СТАРТ ================== */
 resize();
 centerOnPlayer(); cam.s = 0.12;
+{ const v = sessionStorage.getItem("devView"); if (v) { sessionStorage.removeItem("devView"); try { const d = JSON.parse(v); cam.x = d.x; cam.y = d.y; cam.s = d.s; devTool = d.tool; setTimeout(() => setTab("dev")); } catch (e) {} } }
 const firstRun = !S.log.length;
 if (firstRun) intro();
 storyStart();
