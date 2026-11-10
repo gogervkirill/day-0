@@ -9,61 +9,80 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <style>
 :root{
-  --bg:#0d0f0e;--panel:#151917;--panel2:#1d2320;--line:#2c3430;--text:#d9e0d6;--dim:#8a968c;
-  --acc:#d8a330;--good:#5fbf6a;--bad:#e0533f;--ai:#4fb3e8;--gang:#e0533f;
+  --bg:#0a0c0b;--panel:#121614;--panel2:#1a201d;--panel3:#222a26;--line:#2a332e;--line2:#36413b;
+  --text:#e4ebe2;--dim:#8d9a90;--acc:#e3ad3c;--acc2:#f3c766;--good:#62c774;--bad:#e8574a;--ai:#4fb3e8;--gang:#e8574a;
+  --glass:rgba(14,17,16,.72);--shadow:0 8px 28px rgba(0,0,0,.45);--r:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.38 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
 #app{position:fixed;inset:0;display:flex;flex-direction:column}
 #mapWrap{position:relative;flex:1;min-height:0}
 canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
-#hud{position:absolute;left:8px;right:8px;top:8px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
-.bars{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:rgba(13,15,14,.82);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
-.bar{font-size:11px;color:var(--dim)}
-.bar b{color:var(--text);font-weight:600}
-.bar i{display:block;height:5px;border-radius:3px;background:#2a302d;margin-top:3px;overflow:hidden}
-.bar i s{display:block;height:100%;width:50%;text-decoration:none}
-.cellinfo{align-self:flex-start;background:rgba(13,15,14,.82);border:1px solid var(--line);border-radius:10px;padding:5px 9px;font-size:12px;max-width:100%}
-.cellinfo .t{color:var(--acc);font-weight:600}
-#tools{position:absolute;right:8px;bottom:10px;display:flex;flex-direction:column;gap:8px}
-.fab{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(21,25,23,.92);color:var(--text);font-size:19px;display:flex;align-items:center;justify-content:center;cursor:pointer}
-.fab.on{border-color:var(--acc);color:var(--acc)}
-#attrib{position:absolute;left:6px;bottom:4px;font-size:10px;color:#6b766e;pointer-events:none}
-#progress{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(13,15,14,.9);border:1px solid var(--acc);border-radius:12px;padding:10px 14px;min-width:200px;display:none;text-align:center}
-#progress .pb{height:6px;background:#2a302d;border-radius:3px;margin-top:8px;overflow:hidden}
-#progress .pb s{display:block;height:100%;background:var(--acc);width:0;text-decoration:none}
-#progress button{margin-top:8px}
-#sheet{background:var(--panel);border-top:1px solid var(--line);height:40%;max-height:340px;min-height:220px;display:flex;flex-direction:column}
-#tabs{display:flex;border-bottom:1px solid var(--line)}
-#tabs button{flex:1;background:none;border:0;color:var(--dim);padding:10px 4px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent}
-#tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
-#pane{flex:1;overflow:auto;padding:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
-.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;text-align:left}
-.btn:disabled{opacity:.4;cursor:default}
-.btn.acc{border-color:var(--acc);color:var(--acc)}
-.btn.bad{border-color:var(--bad);color:var(--bad)}
-.btn small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(10px) saturate(1.2);backdrop-filter:blur(10px) saturate(1.2);border:1px solid rgba(255,255,255,.07);box-shadow:var(--shadow)}
+#hud{position:absolute;left:10px;right:10px;top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:7px;pointer-events:none}
+.bars{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;border-radius:var(--r);padding:8px 10px}
+.bar{font-size:11px;color:var(--dim);display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:5px}
+.bar b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;font-size:12.5px;justify-self:end}
+.bar i{grid-column:1/-1;display:block;height:6px;border-radius:6px;background:rgba(255,255,255,.07);margin-top:4px;overflow:hidden}
+.bar i s{display:block;height:100%;width:50%;text-decoration:none;border-radius:6px;transition:width .6s ease;box-shadow:0 0 8px currentColor}
+.bar.low b{color:var(--bad);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.45}}
+.cellinfo{align-self:flex-start;border-radius:999px;padding:6px 12px;font-size:12px;max-width:100%;line-height:1.3}
+.cellinfo .t{color:var(--acc2);font-weight:700}
+#eventBar{border-color:rgba(232,87,74,.6)!important;color:#ffd9d4}
+#tools{position:absolute;right:10px;bottom:28px;display:flex;flex-direction:column;gap:10px}
+.fab{width:48px;height:48px;border-radius:50%;color:var(--text);font-size:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s}
+.fab:active{transform:scale(.92)}
+.fab.on{color:var(--acc);box-shadow:0 0 0 2px var(--acc),var(--shadow)}
+#attrib{position:absolute;left:8px;bottom:22px;font-size:9.5px;color:#7c887f;pointer-events:none;text-shadow:0 1px 2px #000}
+#progress{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:var(--r);padding:12px 16px;min-width:220px;display:none;text-align:center;font-weight:600}
+#progress .pb{height:7px;background:rgba(255,255,255,.08);border-radius:7px;margin-top:9px;overflow:hidden}
+#progress .pb s{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));width:0;text-decoration:none;box-shadow:0 0 10px var(--acc)}
+#progress button{margin-top:9px}
+#sheet{position:relative;z-index:2;margin-top:-16px;background:linear-gradient(180deg,#161b18,var(--panel) 60px);border-top:1px solid var(--line2);border-radius:20px 20px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5);height:42%;max-height:360px;min-height:230px;display:flex;flex-direction:column}
+#sheet:before{content:"";position:absolute;left:50%;top:6px;width:38px;height:4px;border-radius:4px;background:var(--line2);transform:translateX(-50%)}
+#tabs{display:flex;gap:2px;padding:14px 8px 6px}
+#tabs button{flex:1;background:none;border:0;color:var(--dim);padding:6px 2px;font-size:11px;cursor:pointer;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:1px;transition:background .15s,color .15s}
+#tabs button .ti{font-size:18px;line-height:1.1;filter:grayscale(.6);opacity:.8;transition:filter .15s,opacity .15s}
+#tabs button.on{color:var(--acc2);background:rgba(227,173,60,.12)}
+#tabs button.on .ti{filter:none;opacity:1}
+#pane{flex:1;overflow:auto;padding:6px 12px 12px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+#pane::-webkit-scrollbar,#mbox::-webkit-scrollbar{width:4px}#pane::-webkit-scrollbar-thumb,#mbox::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+.btn{position:relative;background:linear-gradient(180deg,var(--panel3),var(--panel2));border:1px solid var(--line);color:var(--text);border-radius:12px;padding:10px 12px;font-size:14px;font-weight:600;cursor:pointer;text-align:left;transition:transform .1s,border-color .15s,background .15s;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn.acc{border-color:rgba(227,173,60,.7);color:var(--acc2);background:linear-gradient(180deg,rgba(227,173,60,.16),rgba(227,173,60,.06))}
+.btn.bad{border-color:rgba(232,87,74,.7);color:#ff8a7e;background:linear-gradient(180deg,rgba(232,87,74,.14),rgba(232,87,74,.05))}
+.btn small{display:block;color:var(--dim);font-size:11px;margin-top:2px;font-weight:400}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
 .row:last-child{border-bottom:0}
-.row .n{flex:1}
+.row .n{flex:1;min-width:0}
 .row .n small{display:block;color:var(--dim);font-size:11px}
-.mini{padding:6px 10px;font-size:12px;border-radius:8px}
-.log div{padding:3px 0;border-bottom:1px dashed #252b28;font-size:12.5px}
-.log .tm{color:var(--dim);margin-right:6px;font-variant-numeric:tabular-nums}
-.log .g{color:var(--good)}.log .b{color:var(--bad)}.log .a{color:var(--acc)}
-.dist{margin-bottom:8px}
-.dist .h{display:flex;justify-content:space-between;font-size:13px}
-.dist i{display:block;height:6px;background:#2a302d;border-radius:3px;margin-top:4px;overflow:hidden}
-.dist i s{display:block;height:100%;background:var(--good);text-decoration:none}
+.mini{padding:6px 11px;font-size:12px;border-radius:9px}
+b{font-weight:700}
+#pane > b, .box > b{display:block;margin:10px 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.log div{padding:5px 0 5px 10px;border-left:2px solid var(--line);margin:2px 0;font-size:12.5px}
+.log .tm{color:var(--dim);margin-right:6px;font-variant-numeric:tabular-nums;font-size:11px}
+.log div:has(.g){border-left-color:var(--good)}.log div:has(.b){border-left-color:var(--bad)}.log div:has(.a){border-left-color:var(--acc)}
+.log .g{color:var(--good)}.log .b{color:#ff8a7e}.log .a{color:var(--acc2)}
+.dist{margin-bottom:9px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.dist .h{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:600}
+.dist i{display:block;height:6px;background:rgba(255,255,255,.07);border-radius:6px;margin-top:6px;overflow:hidden}
+.dist i s{display:block;height:100%;background:linear-gradient(90deg,#3f9d50,var(--good));text-decoration:none;border-radius:6px}
 .muted{color:var(--dim);font-size:12px}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
-#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;width:100%;max-width:380px}
-#modal h3{margin:0 0 6px;font-size:17px}
-#modal .acts{display:grid;gap:8px;margin-top:12px}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;z-index:10;padding:0}
+#modal .box{position:relative;background:linear-gradient(180deg,#181e1b,var(--panel) 80px);border:1px solid var(--line2);border-bottom:0;border-radius:22px 22px 0 0;padding:20px 16px max(16px,env(safe-area-inset-bottom));width:100%;max-width:460px;max-height:86vh;overflow:auto;box-shadow:0 -12px 40px rgba(0,0,0,.6);animation:up .22s cubic-bezier(.2,.9,.3,1.1)}
+#modal .box:before{content:"";position:absolute;left:50%;top:7px;width:38px;height:4px;border-radius:4px;background:var(--line2);transform:translateX(-50%)}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+@media (min-width:700px){#modal{align-items:center;padding:16px}#modal .box{border-radius:20px;border-bottom:1px solid var(--line2)}}
+#modal h3{margin:0 0 8px;font-size:18px;letter-spacing:.01em}
+#modal .acts{display:grid;gap:8px;margin-top:14px}
 .hpline{display:flex;gap:10px;font-size:13px;margin:6px 0}
 .clog{max-height:110px;overflow:auto;font-size:12.5px;color:var(--dim);border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
-#toast{position:absolute;left:50%;top:92px;transform:translateX(-50%);background:rgba(13,15,14,.92);border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:13px;display:none;max-width:90%;text-align:center;pointer-events:none}
+#toast{position:absolute;left:50%;top:104px;transform:translateX(-50%);border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;display:none;max-width:90%;text-align:center;pointer-events:none;animation:tin .25s ease}
+@keyframes tin{from{transform:translate(-50%,-8px);opacity:0}}
+select,input,textarea{font:inherit}
 </style>
 </head>
 <body>
@@ -71,31 +90,31 @@ canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;di
   <div id="mapWrap">
     <canvas id="map"></canvas>
     <div id="hud">
-      <div class="bars">
+      <div class="bars glass">
         <div class="bar">❤ <b id="vHp">100</b><i><s id="bHp" style="background:#e0533f"></s></i></div>
         <div class="bar">🥫 <b id="vFood">100</b><i><s id="bFood" style="background:#d8a330"></s></i></div>
         <div class="bar">💧 <b id="vWater">100</b><i><s id="bWater" style="background:#4fb3e8"></s></i></div>
         <div class="bar">⚡ <b id="vEn">100</b><i><s id="bEn" style="background:#5fbf6a"></s></i></div>
       </div>
-      <div class="cellinfo" id="cellInfo">—</div>
-      <div class="cellinfo" id="eventBar" style="display:none;border-color:var(--bad)"></div>
+      <div class="cellinfo glass" id="cellInfo">—</div>
+      <div class="cellinfo glass" id="eventBar" style="display:none"></div>
     </div>
-    <div id="toast"></div>
-    <div id="progress"><div id="pText">…</div><div class="pb"><s id="pBar"></s></div><button class="btn mini" id="pCancel">Отмена</button></div>
+    <div id="toast" class="glass"></div>
+    <div id="progress" class="glass"><div id="pText">…</div><div class="pb"><s id="pBar"></s></div><button class="btn mini" id="pCancel">Отмена</button></div>
     <div id="tools">
-      <button class="fab" id="bGps" title="Режим GPS">📡</button>
-      <button class="fab" id="bCenter" title="К игроку">◎</button>
+      <button class="fab glass" id="bGps" title="Режим GPS">📡</button>
+      <button class="fab glass" id="bCenter" title="К игроку">◎</button>
     </div>
     <div id="attrib"></div>
   </div>
   <div id="sheet">
     <div id="tabs">
-      <button data-t="act" class="on">Действия</button>
-      <button data-t="inv">Рюкзак</button>
-      <button data-t="crew">Люди</button>
-      <button data-t="dist">Цели</button>
-      <button data-t="log">Журнал</button>
-      <button data-t="dev" id="tabDev" style="display:none">🛠</button>
+      <button data-t="act" class="on"><span class="ti">🎯</span>Действия</button>
+      <button data-t="inv"><span class="ti">🎒</span>Рюкзак</button>
+      <button data-t="crew"><span class="ti">👥</span>Люди</button>
+      <button data-t="dist"><span class="ti">🗺</span>Цели</button>
+      <button data-t="log"><span class="ti">📜</span>Журнал</button>
+      <button data-t="dev" id="tabDev" style="display:none"><span class="ti">🛠</span>Dev</button>
     </div>
     <div id="pane"></div>
   </div>
@@ -208,6 +227,13 @@ const POIS = [
   {n:"Автовокзал «Сайран»",t:"station",ll:[76.8583,43.2446]},
   {n:"Высотка на Брусиловского",t:"highrise",ll:[76.8776,43.2420]},
 ];
+function badge(x, y, r, ic, ring, glow) {   // круглый жетон: тёмная подложка, цветное кольцо, значок
+  ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * .4, r * .2, x, y, r);
+  g.addColorStop(0, "#2a322e"); g.addColorStop(1, "#111513"); ctx.fillStyle = g;
+  if (glow) { ctx.shadowColor = ring; ctx.shadowBlur = glow; } else { ctx.shadowColor = "rgba(0,0,0,.6)"; ctx.shadowBlur = 6; }
+  ctx.fill(); ctx.shadowBlur = 0; ctx.lineWidth = Math.max(1.5, r * .14); ctx.strokeStyle = ring; ctx.stroke();
+  ctx.font = Math.round(r * 1.05) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff"; ctx.fillText(ic, x, y + r * .06); ctx.restore();
+}
 const POI_ICON = {landmark:"🏛",market:"🏪",mall:"🏬",tower:"📡",power:"🏭",station:"🚉",park:"🌳",hospital:"🏥",police:"🚓",military:"🎖",hideout:"☠",camp:"🏫",metro:"Ⓜ",highrise:"🏢"};
 const POI_BY = id => POIS.find(p => p.id === id);
 /* Правки карты из режима разработчика (localStorage, отдельно от сохранения): добавленные объекты — в конец POIS */
@@ -524,7 +550,7 @@ function log(msg, cls) {
   if (tab === "log") renderPane();
 }
 function toast(msg) {
-  const t = document.getElementById("toast"); t.textContent = msg; t.style.display = "block";
+  const t = document.getElementById("toast"); t.textContent = msg; t.style.display = "none"; void t.offsetWidth; t.style.display = "block";
   clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 2600);
 }
 
@@ -534,6 +560,7 @@ let W = 0, H = 0, DPR = 1;
 const cam = {x: 0, y: 0, s: 0.05}; // s = пикселей на метр Меркатора
 const MIN_S = 0.006, MAX_S = 4;  // 4 ≈ уровень z19+ (видны отдельные дома)
 let dirty = true;
+const fogC = document.createElement("canvas"), fogX = fogC.getContext("2d"); let lastAnim = 0;
 function resize() {
   DPR = Math.min(2, window.devicePixelRatio || 1);
   const r = cv.getBoundingClientRect(); W = r.width; H = r.height;
@@ -545,7 +572,7 @@ function centerOnPlayer() { const [x, y] = cellCenter(S.p.i, S.p.j); cam.x = x; 
 
 /* Тайлы OpenStreetMap, затемнённые фильтром под стиль игры (без сети — фолбэк на векторы).
    Политика OSM: только лёгкое использование; для релиза — свой PMTiles/тайл-сервер. */
-const TILE_FILTER = "invert(1) hue-rotate(180deg) brightness(.75) contrast(.9) saturate(.5)";
+const TILE_FILTER = "invert(1) hue-rotate(180deg) brightness(.88) contrast(.95) saturate(.55)";
 const tiles = new Map(); let tileOk = 0, tileFail = 0;
 const tilesUsable = () => tileOk > 0 || tileFail < 6;
 // Уже загруженный тайл-предок (для подмены, пока грузится нужный): без запуска загрузки
@@ -619,27 +646,52 @@ function draw() {
   const [i0, j0] = cellOf(x0, y0), [i1, j1] = cellOf(x1, y1);
   const cs = CELL * cam.s;
   const now = Date.now();
+  { // туман войны: мягкие края
+    const fi0 = Math.max(0, i0 - 1), fj0 = Math.max(0, j0 - 1), fw = Math.min(GW - 1, i1 + 1) - fi0 + 1, fh = Math.min(GH - 1, j1 + 1) - fj0 + 1;
+    if (fw > 0 && fh > 0 && fw * fh < 250000) {
+      if (fogC.width !== fw || fogC.height !== fh) { fogC.width = fw; fogC.height = fh; }
+      const img = fogX.createImageData(fw, fh), d = img.data;
+      for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) { const i = fi0 + x, jj = fj0 + (fh - 1 - y), idx = jj * GW + i, o = (y * fw + x) * 4;
+        const c = inCity[idx] ? S.cells[key(i, jj)] : null; d[o] = 6; d[o + 1] = 9; d[o + 2] = 8; d[o + 3] = !inCity[idx] ? 80 : !c || !c.e ? 165 : 0; }
+      fogX.putImageData(img, 0, 0);
+      const [fx, fy] = toScr(OX + fi0 * CELL, OY + (fj0 + fh) * CELL);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; ctx.drawImage(fogC, fx, fy, fw * cs, fh * cs);
+    }
+  }
+  const terr = [], zoneE = [];
   for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
     const idx = j * GW + i; if (!inCity[idx]) continue;
     const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
     const c = S.cells[key(i, j)];
-    if (!c || !c.e) { ctx.fillStyle = "rgba(8,10,9,0.62)"; ctx.fillRect(sx, sy, cs + .6, cs + .6); continue; }
+    if (!c || !c.e) continue;
     const zf = zoneOf[idx] >= 0 && !(c.o) ? POIS[zoneOf[idx]].f : null;
-    if (c.o) { ctx.fillStyle = c.f ? "rgba(95,191,106,0.38)" : "rgba(95,191,106,0.30)"; ctx.fillRect(sx, sy, cs, cs); }
-    else if (zf) { ctx.fillStyle = zf === "ai" ? "rgba(79,179,232,0.16)" : "rgba(224,83,63,0.16)"; ctx.fillRect(sx, sy, cs, cs); }
+    if (c.o) { ctx.fillStyle = c.f ? "rgba(98,199,116,0.30)" : "rgba(98,199,116,0.20)"; ctx.fillRect(sx, sy, cs + .5, cs + .5); terr.push([i, j, sx, sy]); }
+    else if (zf) { ctx.fillStyle = zf === "ai" ? "rgba(79,179,232,0.11)" : "rgba(232,87,74,0.11)"; ctx.fillRect(sx, sy, cs + .5, cs + .5); zoneE.push([i, j, sx, sy, zf, zoneOf[idx]]); }
     if (c.ls && c.lc >= 3 && now - c.ls < RESPAWN) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(sx, sy, cs, cs); }
     if (cs > 14 && c.s && baseTrap(i, j) && !c.td) { ctx.font = Math.min(18, cs * .5) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#e8a23a"; ctx.fillText("⚠", sx + cs * .8, sy + cs * .22); }
   }
+  // контур своей территории и зон
+  if (terr.length) { ctx.strokeStyle = "rgba(120,230,140,.85)"; ctx.lineWidth = Math.max(1.5, Math.min(3, cs * .05)); ctx.beginPath();
+    const own = (i, j) => (S.cells[key(i, j)] || {}).o;
+    for (const [i, j, sx, sy] of terr) { if (!own(i + 1, j)) { ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); } if (!own(i - 1, j)) { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + cs); }
+      if (!own(i, j + 1)) { ctx.moveTo(sx, sy); ctx.lineTo(sx + cs, sy); } if (!own(i, j - 1)) { ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); } }
+    ctx.shadowColor = "rgba(98,199,116,.8)"; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0; }
+  if (zoneE.length && cs > 6) { ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+    for (const f of ["gang", "ai"]) { ctx.strokeStyle = f === "ai" ? "rgba(79,179,232,.7)" : "rgba(232,87,74,.7)"; ctx.beginPath();
+      for (const [i, j, sx, sy, zf, z] of zoneE) { if (zf !== f) continue; const same = (a, b) => inGrid(a, b) && zoneOf[b * GW + a] === z;
+        if (!same(i + 1, j)) { ctx.moveTo(sx + cs, sy); ctx.lineTo(sx + cs, sy + cs); } if (!same(i - 1, j)) { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + cs); }
+        if (!same(i, j + 1)) { ctx.moveTo(sx, sy); ctx.lineTo(sx + cs, sy); } if (!same(i, j - 1)) { ctx.moveTo(sx, sy + cs); ctx.lineTo(sx + cs, sy + cs); } }
+      ctx.stroke(); } ctx.setLineDash([]); }
   // сетка
-  if (cs > 9) {
-    ctx.strokeStyle = "rgba(216,163,48,0.10)"; ctx.lineWidth = 1; ctx.beginPath();
+  if (cs > 16) {
+    ctx.strokeStyle = `rgba(227,173,60,${Math.min(.09, (cs - 16) / 300)})`; ctx.lineWidth = 1; ctx.beginPath();
     for (let i = Math.max(0, i0); i <= Math.min(GW, i1 + 1); i++) { const [sx] = toScr(OX + i * CELL, 0); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); }
     for (let j = Math.max(0, j0); j <= Math.min(GH, j1 + 1); j++) { const [, sy] = toScr(0, OY + j * CELL); ctx.moveTo(0, sy); ctx.lineTo(W, sy); }
     ctx.stroke();
   }
   // границы районов (видимые клетки)
   if (cs > 5) {
-    ctx.strokeStyle = "rgba(216,163,48,0.45)"; ctx.lineWidth = 1.5; ctx.beginPath();
+    ctx.strokeStyle = "rgba(227,173,60,0.35)"; ctx.lineWidth = 1.2; ctx.beginPath();
     for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
       const d = distOf[j * GW + i]; if (d < 0) continue;
       const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
@@ -652,8 +704,9 @@ function draw() {
   if (!S.gps) {
     const r = moveR();
     const [sx, sy] = toScr(OX + (S.p.i - r) * CELL, OY + (S.p.j + r + 1) * CELL);
-    ctx.strokeStyle = "rgba(216,163,48,0.85)"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5;
-    ctx.strokeRect(sx, sy, cs * (2 * r + 1), cs * (2 * r + 1)); ctx.setLineDash([]);
+    const sz = cs * (2 * r + 1); ctx.fillStyle = "rgba(227,173,60,.035)"; ctx.strokeStyle = "rgba(243,199,102,.75)"; ctx.setLineDash([8, 6]); ctx.lineWidth = 1.6;
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(sx, sy, sz, sz, Math.min(14, cs * .4)); else ctx.rect(sx, sy, sz, sz); ctx.fill();
+    ctx.shadowColor = "rgba(227,173,60,.6)"; ctx.shadowBlur = 6; ctx.stroke(); ctx.shadowBlur = 0; ctx.setLineDash([]);
   }
   // точки интереса (только открытые)
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -662,11 +715,12 @@ function draw() {
     const c = S.cells[key(p.i, p.j)]; if (!c || !c.e) return;
     const [sx, sy] = toScr(...cellCenter(p.i, p.j));
     if (sx < -60 || sy < -30 || sx > W + 60 || sy > H + 30) return;
-    ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText(POI_ICON[p.t] || "•", sx, sy);
+    badge(sx, sy, Math.max(10, Math.min(19, cs * .34)), POI_ICON[p.t] || "•", p.t === "camp" ? "#62c774" : p.f === "ai" ? "#4fb3e8" : p.f ? "#e8574a" : "#e3ad3c");
     if (cs > 18) { ctx.font = "600 11px system-ui"; const w = ctx.measureText(p.n).width, ly = sy + Math.min(cs * .5, 22) + 4;
-      const box = [sx - w / 2 - 2, ly - 7, sx + w / 2 + 2, ly + 7];
+      const box = [sx - w / 2 - 2, ly - 7, sx + w / 2 + 2, ly + 8];
       if (!labels.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) { labels.push(box);
-        ctx.fillStyle = "#000"; ctx.fillText(p.n, sx + 1, ly + 1); ctx.fillStyle = "#e8d9b0"; ctx.fillText(p.n, sx, ly); } }
+        ctx.fillStyle = "rgba(10,12,11,.78)"; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(box[0] - 3, box[1] - 1, box[2] - box[0] + 6, 16, 8); else ctx.rect(box[0] - 3, box[1] - 1, box[2] - box[0] + 6, 16); ctx.fill();
+        ctx.fillStyle = "#efe3c2"; ctx.fillText(p.n, sx, ly + 1); } }
   });
   if (S.base) { const [bi, bj] = S.base.split(",").map(Number); const [sx, sy] = toScr(...cellCenter(bi, bj));
     ctx.font = Math.max(12, Math.min(22, cs * .55)) + "px system-ui"; ctx.fillText("🏠", sx - cs * .25, sy - cs * .25); }
@@ -747,9 +801,8 @@ function draw() {
     if (!visible(e.i, e.j)) return;
     const [sx, sy] = toScr(...cellCenter(e.i, e.j));
     const ex = sx + (e.ox || 0) * cs, ey = sy + (e.oy || 0) * cs, er = Math.max(10, Math.min(18, cs * .3));
-    if (e.aggro) { ctx.beginPath(); ctx.arc(ex, ey, er, 0, 7); ctx.fillStyle = "rgba(224,83,63,.28)"; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#e0533f"; ctx.stroke(); }
-    ctx.font = Math.max(12, Math.min(22, cs * .5)) + "px system-ui";
-    ctx.fillText(ENEMY[e.type].i, ex, ey);
+    if (e.aggro) { const ph = (now % 1000) / 1000; ctx.beginPath(); ctx.arc(ex, ey, er * (1.1 + ph * .9), 0, 7); ctx.strokeStyle = `rgba(232,87,74,${.7 * (1 - ph)})`; ctx.lineWidth = 2; ctx.stroke(); }
+    badge(ex, ey, er * .85, ENEMY[e.type].i, ENEMY[e.type].f === "ai" ? "#4fb3e8" : "#e8574a", e.aggro ? 12 : 0);
   });
   if (devTool && devTool.sel != null && POIS[devTool.sel]) { const q = POIS[devTool.sel], [qx, qy] = toScr(...cellCenter(q.i, q.j));
     ctx.strokeStyle = "#4fb3e8"; ctx.lineWidth = 3; ctx.setLineDash([4, 3]); ctx.strokeRect(qx - cs / 2, qy - cs / 2, cs, cs); ctx.setLineDash([]); }
@@ -761,8 +814,13 @@ function draw() {
   let [px, py] = cellCenter(S.p.i, S.p.j);
   if (travel) { const k = Math.min(1, (now - travel.t0) / travel.dur); const [ax, ay] = cellCenter(travel.fi, travel.fj); px = ax + (px - ax) * k; py = ay + (py - ay) * k; }
   const [sx, sy] = toScr(px, py);
-  ctx.beginPath(); ctx.arc(sx, sy, Math.max(7, Math.min(13, cs * .28)), 0, 7);
-  ctx.fillStyle = "#d8a330"; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = "#0d0f0e"; ctx.stroke();
+  { const pr = Math.max(7, Math.min(13, cs * .28)), ph = (now % 1800) / 1800;
+    ctx.beginPath(); ctx.arc(sx, sy, pr + ph * pr * 1.8, 0, 7); ctx.strokeStyle = `rgba(243,199,102,${.55 * (1 - ph)})`; ctx.lineWidth = 2; ctx.stroke();
+    const g = ctx.createRadialGradient(sx, sy - pr * .4, 1, sx, sy, pr); g.addColorStop(0, "#ffe39a"); g.addColorStop(1, "#d99a22");
+    ctx.beginPath(); ctx.arc(sx, sy, pr, 0, 7); ctx.fillStyle = g; ctx.shadowColor = "rgba(243,199,102,.9)"; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 2.5; ctx.strokeStyle = "#0b0d0c"; ctx.stroke(); }
+  { const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .45, W / 2, H / 2, Math.max(W, H) * .78);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); }
   // ночь (по реальному времени Алматы)
   const hr = new Date().getHours();
   if (hr >= 21 || hr < 6) { ctx.fillStyle = "rgba(5,8,20,0.28)"; ctx.fillRect(0, 0, W, H); }
@@ -2208,7 +2266,7 @@ function setTab(t) { tab = t; document.querySelectorAll("#tabs button").forEach(
 function openModal(html) { document.getElementById("mbox").innerHTML = html; document.getElementById("modal").style.display = "flex"; }
 function closeModal() { document.getElementById("modal").style.display = "none"; }
 function renderHud() {
-  const p = S.p; const set = (id, v) => { document.getElementById("v" + id).textContent = Math.round(v); document.getElementById("b" + id).style.width = v + "%"; };
+  const p = S.p; const set = (id, v) => { document.getElementById("v" + id).textContent = Math.round(v); document.getElementById("b" + id).style.width = v + "%"; document.getElementById("v" + id).parentNode.classList.toggle("low", v < 25); };
   set("Hp", p.hp); set("Food", p.food); set("Water", p.water); set("En", p.en);
   const c = S.cells[key(p.i, p.j)] || {};
   const z = zoneFaction(p.i, p.j);
@@ -2358,6 +2416,7 @@ function frame() {
     if ((tab === "act" || tab === "crew") && !busy && document.getElementById("modal").style.display !== "flex") renderPane();
     if (now - lastSave > 10000) { lastSave = now; save(); }
   }
+  if (now - lastAnim > 80) { lastAnim = now; dirty = true; }
   if (dirty) draw();
   requestAnimationFrame(frame);
 }
