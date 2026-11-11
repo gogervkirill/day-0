@@ -103,6 +103,7 @@ select,input,textarea{font:inherit}
     <div id="toast" class="glass"></div>
     <div id="progress" class="glass"><div id="pText">…</div><div class="pb"><s id="pBar"></s></div><button class="btn mini" id="pCancel">Отмена</button></div>
     <div id="tools">
+      <button class="fab glass" id="bLayer" title="Слой: районы">🗺</button>
       <button class="fab glass" id="bScan" title="Сканер ресурсов">🔎</button>
       <button class="fab glass" id="bGps" title="Режим GPS">📡</button>
       <button class="fab glass" id="bCenter" title="К игроку">◎</button>
@@ -228,6 +229,16 @@ const POIS = [
   {n:"Метро «Москва»",t:"metro",ll:[76.8676,43.2307],id:"m_moskva",link:"m_sairan"},
   {n:"Автовокзал «Сайран»",t:"station",ll:[76.8583,43.2446]},
   {n:"Высотка на Брусиловского",t:"highrise",ll:[76.8776,43.2420]},
+  /* --- линия метро (OSM) --- */
+  {n:"Метро «Райымбек батыра»",t:"metro",ll:[76.94466,43.27111]},
+  {n:"Метро «Жибек Жолы»",t:"metro",ll:[76.94603,43.26050]},
+  {n:"Метро «Алмалы»",t:"metro",ll:[76.94709,43.25204]},
+  {n:"Метро «Абая»",t:"metro",ll:[76.94845,43.24255]},
+  {n:"Метро «Байконур»",t:"metro",ll:[76.92882,43.24124]},
+  {n:"Метро «Театр Ауэзова»",t:"metro",ll:[76.91702,43.24026]},
+  {n:"Метро «Алатау»",t:"metro",ll:[76.89755,43.23845]},
+  {n:"Метро «Сарыарка»",t:"metro",ll:[76.85822,43.22371]},
+  {n:"Метро «Момышулы»",t:"metro",ll:[76.83784,43.21640]},
 ];
 function badge(x, y, r, ic, ring, glow) {   // круглый жетон: тёмная подложка, цветное кольцо, значок
   ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * .4, r * .2, x, y, r);
@@ -497,7 +508,7 @@ function newState() {
     inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
     cells: {}, log: [], kills: 0, deaths: 0, gps: false,
     xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
-    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "scrap", disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, stat: {}, guide: 0,
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "scrap", showDist: false, disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, stat: {}, guide: 0,
   };
 }
 function migrateCells(l) {  // старая клетка 250 м (i,j) = четыре новых 125 м: (2i..2i+1, 2j..2j+1)
@@ -527,11 +538,58 @@ function migrateBuild() {
 }
 const pk = k => S.perks[k] || 0;
 const carOn = () => S.vehicle === "car" && S.tank >= .5;
-const moveR = () => 3 + pk("fast") + (S.vehicle === "bike" ? 1 : carOn() ? 3 : 0);
+const moveR = () => 3 + pk("fast") + (ctl("station") ? 1 : 0) + (S.vehicle === "bike" ? 1 : carOn() ? 3 : 0);
 const maxW = () => 25 + 8 * pk("carry");
 const xpNext = () => 40 + S.lvl * 30;
+/* Важные места: захваченный объект даёт бонус, пока клетка ваша. ctl(t) — сколько объектов типа t под контролем */
+const PLACE = {
+  hospital:{b:"раненые лечатся вдвое быстрее; на клетке — бесплатное лечение раз в 10 мин"},
+  mall:    {b:"+3 места для выживших за каждый ТЦ"},
+  market:  {b:"барахолка без наценки курьера из любой точки"},
+  power:   {b:"все постройки работают на 15% быстрее за каждую станцию"},
+  tower:   {b:"радиус сканера +2 за каждую вышку"},
+  station: {b:"+1 клетка к радиусу перехода"},
+  police:  {b:"охрана клеток сильнее на 30%"},
+  military:{b:"ваш урон в бою +20%"},
+  park:    {b:"отряд ест на четверть меньше"},
+  landmark:{b:"+20% опыта"},
+  highrise:{b:"враги видны на 3 клетки дальше; обзор с крыши"},
+  hideout: {b:"набеги на ваши клетки на 30% реже"},
+  metro:   {b:"безопасная станция; тоннели ко всем открытым станциям", own: false},
+  camp:    {b:"безопасно: лечение, лавка, склад для крафта", own: false},
+};
+let ctlCache = null, ctlT = 0;
+function ctl(t) {
+  const now = Date.now(); if (!ctlCache || now - ctlT > 500) { ctlCache = {}; ctlT = now;
+    for (const q of POIS) { if (q.hidden || q.i === undefined) continue; const c = S.cells[q.i + "," + q.j]; if (c && c.o) ctlCache[q.t] = (ctlCache[q.t] || 0) + 1; } }
+  return ctlCache[t] || 0;
+}
+function placeHtml(poi, owned) {
+  const P = PLACE[poi.t]; if (!P) return "";
+  const on = P.own === false || owned;
+  return `<div class="dist" style="border-color:${on ? "rgba(98,199,116,.6)" : "rgba(227,173,60,.5)"}"><div class="h"><span>${POI_ICON[poi.t] || "⭐"} Важное место</span><span style="color:${on ? "var(--good)" : "var(--acc2)"};font-size:12px">${P.own === false ? "доступно всем" : owned ? "✔ бонус активен" : "захватите клетку"}</span></div><div class="muted" style="margin-top:3px">${P.b}</div></div>`;
+}
+function actHeal() {
+  const c = S.cells[key(S.p.i, S.p.j)]; if (!c || !c.o || cellBase(S.p.i, S.p.j).t !== "hospital" || Date.now() < (S.healT || 0)) return;
+  startBusy("Перевязка в больнице…", 8, 0, () => { S.p.hp = 100; S.healT = Date.now() + 10 * 60e3; log("🏥 Вас подлатали: здоровье полное", "g"); toast("🏥 Здоровье 100"); });
+}
+function openMetro() {
+  const here = POIS[poiAt.get(key(S.p.i, S.p.j))]; if (!here || here.t !== "metro") return;
+  const known = POIS.filter(q => q.t === "metro" && !q.hidden && q !== here && ((S.disc || {})[POIS.indexOf(q)] || (S.cells[key(q.i, q.j)] || {}).v));
+  const all = POIS.filter(q => q.t === "metro" && !q.hidden).length;
+  openModal(`<h3>🚇 ${here.n}</h3><p class="muted">Тоннели ведут ко всем станциям, на которых вы уже бывали (${known.length + 1}/${all}). Переход: 15 с + 1 с за клетку, −10⚡. Станции безопасны, но в вестибюле может быть засада.</p>
+    ${known.sort((a, b) => cheb(a.i, a.j, S.p.i, S.p.j) - cheb(b.i, b.j, S.p.i, S.p.j)).map(q => `<div class="row"><div class="n">${q.n.replace("Метро ", "")}<small>${cheb(q.i, q.j, S.p.i, S.p.j)} кл. · ${DISTRICTS[distOf[q.j * GW + q.i]]?.n || ""}</small></div><button class="btn mini acc" onclick="goMetro(${POIS.indexOf(q)})">Ехать</button></div>`).join("") || '<p class="muted">Других станций вы пока не нашли. Ищите значки «?» на карте вдоль проспекта Абая и улицы Фурманова.</p>'}
+    <div class="acts"><button class="btn" onclick="closeModal()">Закрыть</button></div>`);
+}
+function goMetro(k) {
+  const to = POIS[k]; if (!to) return; closeModal();
+  startBusy("По тоннелю до «" + to.n.replace("Метро ", "") + "»…", 15 + Math.min(45, Math.round(cheb(to.i, to.j, S.p.i, S.p.j) / 2)), 10, () => {
+    S.p.i = to.i; S.p.j = to.j; log("🚇 Вы вышли на станции " + to.n, "a"); centerOnPlayer(); enterCell(to.i, to.j);
+    if (Math.random() < .15) { log("В вестибюле кто-то есть!", "b"); spawnNear("ambush"); }
+  });
+}
 function gainXp(n) {
-  S.xp += n;
+  S.xp += ctl("landmark") ? Math.ceil(n * 1.2) : n;
   while (S.xp >= xpNext()) { S.xp -= xpNext(); S.lvl++; S.pendingPerks++; log("★ Уровень " + S.lvl + "! Выберите навык", "g"); toast("Новый уровень: " + S.lvl); }
 }
 const C = k => S.cells[k] || (S.cells[k] = {});
@@ -694,9 +752,9 @@ function draw() {
     for (let j = Math.max(0, j0); j <= Math.min(GH, j1 + 1); j++) { const [, sy] = toScr(0, OY + j * CELL); ctx.moveTo(0, sy); ctx.lineTo(W, sy); }
     ctx.stroke();
   }
-  // границы районов (видимые клетки)
-  if (cs > 5) {
-    ctx.strokeStyle = "rgba(227,173,60,0.35)"; ctx.lineWidth = 1.2; ctx.beginPath();
+  // границы районов — отдельный слой (кнопка 🗺)
+  if (S.showDist && cs > 2) {
+    ctx.strokeStyle = "rgba(227,173,60,0.7)"; ctx.lineWidth = 1.6; ctx.beginPath();
     for (let j = Math.max(0, j0); j <= Math.min(GH - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(GW - 1, i1); i++) {
       const d = distOf[j * GW + i]; if (d < 0) continue;
       const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
@@ -705,6 +763,9 @@ function draw() {
     }
     ctx.stroke();
   }
+  if (S.showDist) { ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "800 " + Math.max(11, Math.min(20, cs * 1.6)) + "px system-ui";
+    DISTRICTS.forEach(d => { if (!d.s || !d.s[0]) return; const [dx, dy] = toScr(...merc(d.s[0][0], d.s[0][1])); if (dx < -80 || dy < -20 || dx > W + 80 || dy > H + 20) return;
+      const t = d.n.toUpperCase(); ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillText(t, dx + 1, dy + 1); ctx.fillStyle = "rgba(243,199,102,.85)"; ctx.fillText(t, dx, dy); }); }
   // радиус перемещения
   if (!S.gps) {
     const r = moveR();
@@ -721,7 +782,7 @@ function draw() {
     if (!c || !c.e) { if (!p.hidden && cs > 7 && cheb(p.i, p.j, S.p.i, S.p.j) <= 18) { const [qx, qy] = toScr(...cellCenter(p.i, p.j)); ctx.globalAlpha = .75; badge(qx, qy, Math.max(8, Math.min(13, cs * .25)), "?", "#8d9a90"); ctx.globalAlpha = 1; } return; }
     const [sx, sy] = toScr(...cellCenter(p.i, p.j));
     if (sx < -60 || sy < -30 || sx > W + 60 || sy > H + 30) return;
-    badge(sx, sy, Math.max(10, Math.min(19, cs * .34)), POI_ICON[p.t] || "•", p.t === "camp" ? "#62c774" : p.f === "ai" ? "#4fb3e8" : p.f ? "#e8574a" : "#e3ad3c");
+    badge(sx, sy, Math.max(10, Math.min(19, cs * .34)), POI_ICON[p.t] || "•", p.t === "camp" || c.o ? "#62c774" : p.f === "ai" ? "#4fb3e8" : p.f ? "#e8574a" : "#e3ad3c", c.o ? 10 : 0);
     if (cs > 18) { ctx.font = "600 11px system-ui"; const w = ctx.measureText(p.n).width, ly = sy + Math.min(cs * .5, 22) + 4;
       const box = [sx - w / 2 - 2, ly - 7, sx + w / 2 + 2, ly + 8];
       if (!labels.some(b => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) { labels.push(box);
@@ -833,7 +894,7 @@ function draw() {
 const SEE_R = 5;
 function visible(i, j) { // враги видны в радиусе SEE_R (вплотную — даже в тумане), в разведанных клетках — тоже
   const d = cheb(i, j, S.p.i, S.p.j); if (d <= 2) return true;
-  const c = S.cells[key(i, j)]; return d <= SEE_R && !!(c && c.e);
+  const c = S.cells[key(i, j)]; return d <= SEE_R + (ctl("highrise") ? 3 : 0) && !!(c && c.e);
 }
 
 /* ================== ВВОД: ПАН / ЗУМ / ТАП ================== */
@@ -942,7 +1003,7 @@ function onTap(sx, sy) {
   const cost = carOn() ? (path.length * .25) + " бензина" : (S.vehicle === "bike" ? path.length : path.length * EN_PER_CELL) + "⚡";
   const z = zoneFaction(i, j); pendingPath = path;
   openModal(`<h3>🧭 ${c && c.e ? cellBase(i, j).n : "Неизвестная территория"}</h3>
-    <p class="muted">${c && c.e ? describe(i, j) : DISTRICTS[distOf[j * GW + i]].n + " район · не разведано"}</p>
+    <p class="muted">${c && c.e ? describe(i, j) : DISTRICTS[distOf[j * GW + i]].n + " район · не разведано"}</p>${c && c.e && cellBase(i, j).poi ? placeHtml(cellBase(i, j).poi, c.o) : ""}
     <p>Путь: <b>${path.length} кл.</b> (${(path.length * CELL_REAL / 1000).toFixed(1)} км) · около <b>${sec >= 90 ? Math.round(sec / 60) + " мин" : sec + " с"}</b> · ${cost}${z ? ` · <span style="color:var(--bad)">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : ""}</p>
     <p class="muted">Персонаж пойдёт сам. Если кончатся силы — сделает привал и продолжит. Если заметит враг или начнётся бой — остановится.</p>
     <div class="acts"><button class="btn acc" onclick="startRoute()">Идти сюда</button><button class="btn" onclick="pendingPath=null;closeModal()">Отмена</button></div>`);
@@ -1026,7 +1087,7 @@ function craftEmp() {
   if ((S.inv.parts || 0) < 4 || (S.inv.batt || 0) < 2) return;
   dec("parts", 4); dec("batt", 2); S.inv.emp = (S.inv.emp || 0) + 1; log("Собрана ЭМИ-граната", "g"); renderAll(); save();
 }
-function playerDmg() { const r = rawDmg(); r.d = Math.round(r.d * (1 + .15 * pk("fight"))); return r; }
+function playerDmg() { const r = rawDmg(); r.d = Math.round(r.d * (1 + .15 * pk("fight")) * (ctl("military") ? 1.2 : 1)); return r; }
 function rawDmg() {
   const w = S.weapon && S.inv[S.weapon] ? ITEMS[S.weapon] : null;
   if (!w) return {d: rnd(3, 6), n: "кулаки"};
@@ -1164,7 +1225,7 @@ function doScan(d) {
 }
 
 /* ----- живой сканер: тепловая карта выбранного ресурса вокруг игрока; импульс (батарейка) — шире и на 10 минут ----- */
-const liveR = () => 4 + coreLv("sight");
+const liveR = () => 4 + coreLv("sight") + 2 * ctl("tower");
 function scanActive(now = Date.now()) {   // {d, i, j, r, boost}
   if (S.scan && now < S.scan.until) return {d: S.scan.d, i: S.scan.i, j: S.scan.j, r: S.scan.r, boost: S.scan.until};
   return S.scanOn ? {d: S.scanD || "scrap", i: S.p.i, j: S.p.j, r: liveR()} : null;
@@ -1247,6 +1308,11 @@ function discover(i, j, b) {
   if (b.poi) { const k = POIS.indexOf(b.poi), disc = S.disc = S.disc || {}; if (!disc[k]) { disc[k] = 1; S.money += 10; gainXp(15); buzz(30);
       log(`🏛 Открытие: ${b.poi.n} (${Object.keys(disc).length}/${POIS.filter(p => !p.hidden).length}). +10 💰`, "g"); toast(`🏛 Открытие: ${b.poi.n} · +10 💰`); } }
 }
+function bonusHtml() {
+  const rows = Object.entries(PLACE).filter(([t, P]) => P.own !== false).map(([t, P]) => { const n = ctl(t), tot = POIS.filter(q => q.t === t && !q.hidden).length; if (!tot) return "";
+    return `<div class="row"><div class="n" style="opacity:${n ? 1 : .55}">${POI_ICON[t] || ""} ${DEV_TNAME[t] || t} <span class="muted">${n}/${tot}</span><small>${P.b}</small></div>${n ? '<span style="color:var(--good)">✔</span>' : ""}</div>`; }).join("");
+  return `<b>Важные места и бонусы</b><div class="dist">${rows}<div class="muted" style="margin-top:5px">Бонус действует, пока клетка с объектом ваша. Объекты банд и ИИ сначала нужно зачистить. Ставьте охрану: набег отнимет клетку вместе с бонусом.</div></div>`;
+}
 function discHtml() {
   const tot = POIS.filter(p => !p.hidden).length, n = Object.keys(S.disc || {}).length, cells = st("cells");
   return `<b>Исследование</b><div class="dist"><div class="h"><span>🏛 Места Алматы</span><span class="muted">${n}/${tot}</span></div><i><s style="width:${n / tot * 100}%;background:linear-gradient(90deg,var(--acc),var(--acc2))"></s></i>
@@ -1278,7 +1344,7 @@ const MKT_BUY = ["can","veg","water","rusk","band","medkit","parts","batt","reba
 const mIdx = k => (S.mkt || {})[k] || 1;
 const isDef = k => S.deficit && S.deficit.k === k && Date.now() < S.deficit.until;
 const atCamp = () => cellBase(S.p.i, S.p.j).t === "camp";
-const fee = () => atCamp() ? 1 : [.75, .85, .92, 1][specBest("courier")];
+const fee = () => atCamp() || ctl("market") ? 1 : [.75, .85, .92, 1][specBest("courier")];
 const sellP = k => Math.max(1, Math.floor(VAL[k] * mIdx(k) * (isDef(k) ? 1.6 : 1) * fee()));
 const buyP = k => Math.max(1, Math.ceil(VAL[k] * mIdx(k) * (isDef(k) ? 1.6 : 1) * 1.5 / fee()));
 let lastMkt = 0;
@@ -1342,7 +1408,7 @@ function hqBoost(i, j) {          // множитель скорости от ш
 function bEvery(k) {   // интервал выработки: база / (штаб × качество залежи × состояние)
   const [i, j] = kij(k), c = S.cells[k], B = BUILD[c.b.t];
   const core = B.g === "raw" ? 1 + .1 * coreLv("harvest") : 1 + .15 * coreLv("synth");
-  return B.every * 60e3 / (hqBoost(i, j) * (B.depo ? qMult(depoQ(i, j, B.depo)) : 1) * condMult(bCond(c)) * core * workMult(c));
+  return B.every * 60e3 / (hqBoost(i, j) * (B.depo ? qMult(depoQ(i, j, B.depo)) : 1) * condMult(bCond(c)) * core * workMult(c) * (1 + .15 * ctl("power")));
 }
 function bPerTick(k) {
   const c = S.cells[k], B = BUILD[c.b.t]; const [i, j] = kij(k);
@@ -1498,7 +1564,7 @@ function hurtBuilding(c, dmg, now = Date.now()) { c.b.wh = Math.max(0, bCond(c, 
 /* Охрана клетки — выжившие из отряда (c.g = [id]). Сила: 15 + боец×8 + уровень×3 */
 const guardStr = m => 15 + m.s.fight * 8 + m.lv * 3;
 const guards = g => (Array.isArray(g) ? g : []).map(crewBy).filter(m => m && m.st === "guard");
-const gStr = g => guards(g).reduce((a, m) => a + guardStr(m), 0);
+const gStr = g => Math.round(guards(g).reduce((a, m) => a + guardStr(m), 0) * (ctl("police") ? 1.3 : 1));
 const gCount = g => guards(g).length;
 const unitsTxt = g => guards(g).map(m => m.n).join(", ") || "нет";
 function openGuard() {
@@ -1632,7 +1698,7 @@ const NAMES = ["Айдар","Дана","Ерлан","Асель","Тимур","�
 const STATUS = {idle:"в лагере", mission:"на вылазке", work:"на постройке", guard:"в охране", hurt:"ранен(а)"};
 const HUB_NAME = () => S.base ? "убежище" : "лагерь";
 const hub = () => S.base ? kij(S.base) : [START.i, START.j];
-const crewCap = () => { let n = 2 + (S.base ? 2 : 0); for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === "dorm" && bWorking(c)) n += 3 * c.b.lv; } return n; };
+const crewCap = () => { let n = 2 + (S.base ? 2 : 0) + 3 * ctl("mall"); for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === "dorm" && bWorking(c)) n += 3 * c.b.lv; } return n; };
 const crewBy = id => (S.crew || []).find(m => m.id === id);
 function newSurvivor(prof) {
   const p = prof || pick(SK), s = {}; SK.forEach(k => s[k] = 1); s[p] = rnd(2, 3); s[pick(SK)] += 1;
@@ -1673,10 +1739,10 @@ let lastCrewTick = Date.now();
 function crewTick(now) {
   if (now - lastCrewTick < 60e3) return; const h = (now - lastCrewTick) / 3600e3; lastCrewTick = now;
   const crew = S.crew || []; if (!crew.length) return;
-  S.ration = (S.ration || 0) + crew.length * h;                // накопленный долг пайков
+  S.ration = (S.ration || 0) + crew.length * h * (ctl("park") ? .75 : 1);                // накопленный долг пайков
   let hungry = 0;
   while (S.ration >= 1) { S.ration--; const f = FOOD_IT.some(takeRation), w = takeRation("water"); if (!f || !w) hungry++; }
-  const medHeal = crew.some(m => m.p === "med" && m.st !== "mission") ? 2 : 1;
+  const medHeal = (crew.some(m => m.p === "med" && m.st !== "mission") ? 2 : 1) * (ctl("hospital") ? 2 : 1);
   for (const m of [...crew]) {
     if ((m.st === "work" && !(S.cells[m.job] || {}).b) || (m.st === "guard" && !(S.cells[m.job] || {}).o)) unassign(m);
     if (hungry > 0) { m.mo -= 15; hungry--; } else m.mo = Math.min(100, m.mo + 10 * h);
@@ -2335,7 +2401,7 @@ function raids() {
   const now = Date.now(); if (now - lastRaid < 300e3) return; lastRaid = now;
   const own = Object.keys(S.cells).filter(k => S.cells[k].o);
   const exposed = own.filter(k => { const [i, j] = k.split(",").map(Number); return !microFree(microOf[j * GW + i]) && (zoneOf[j * GW + i] >= 0 || hash(i, j, Math.floor(now / 120e3)) < .15); });
-  if (!exposed.length || Math.random() < .65) return;
+  if (!exposed.length || Math.random() < .65 || (ctl("hideout") && Math.random() < .3)) return;
   const k = pick(exposed), c = S.cells[k]; const [i, j] = k.split(",").map(Number);
   if (i === S.p.i && j === S.p.j || k === S.base) return;
   const def = nearDefense(i, j);
@@ -2392,6 +2458,7 @@ function setGps(on) {
 document.getElementById("bGps").onclick = () => setGps(!S.gps);
 document.getElementById("bCenter").onclick = centerOnPlayer;
 document.getElementById("bScan").onclick = scanToggle;
+document.getElementById("bLayer").onclick = () => { S.showDist = !S.showDist; toast(S.showDist ? "🗺 Слой районов включён" : "Слой районов скрыт"); renderAll(); save(); };
 
 /* ================== UI ================== */
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.t));
@@ -2406,7 +2473,7 @@ function renderHud() {
   document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span>${streetOf(p.i, p.j) ? " · " + streetOf(p.i, p.j) : ""} · ${DISTRICTS[distOf[p.j * GW + p.i]].n}` + (microOf[p.j * GW + p.i] >= 0 ? ` · мкр ${MICRO[microOf[p.j * GW + p.i]].n}` : "") + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
     (c.o ? ` · <span style="color:var(--good)">ваша${c.f ? " 🛡" : ""}</span>` : z ? ` · <span style="color:${z === "ai" ? "var(--ai)" : "var(--gang)"}">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : "") +
     (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡 GPS" : "") + " · " + S.money + " 💰";
-  renderScanBar();
+  renderScanBar(); document.getElementById("bLayer").classList.toggle("on", !!S.showDist);
   const eb = document.getElementById("eventBar"); const E = S.event;
   if (E && E.t !== "quake") { eb.style.display = "block"; eb.innerHTML = EV[E.t] + (E.i !== undefined ? " · " + cheb(E.i, E.j, p.i, p.j) + " кл. от вас" : "") + " · " + Math.ceil((E.until - Date.now()) / 60e3) + " мин"; }
   else eb.style.display = "none";
@@ -2425,6 +2492,7 @@ function renderPane() {
     const mins = c.ls ? Math.max(0, Math.ceil((RESPAWN - (Date.now() - c.ls)) / 60e3)) : 0;
     el.innerHTML = `
      ${guideHtml()}
+     ${here.poi ? placeHtml(here.poi, c.o) : ""}
      ${route ? `<button class="btn" style="width:100%;margin-bottom:8px" onclick="stopRoute('Маршрут остановлен')">⏹ Остановить маршрут<small>${route.rest ? "привал: коплю силы · " : ""}осталось ${route.path.length - route.k} кл.</small></button>` : travel ? `<p class="muted">В пути…</p>` : ""}
      <div class="grid2">
       <button class="btn acc" ${lock || left <= 0 ? "disabled" : ""} onclick="actSearch()">🔍 Обыскать<small>${left > 0 ? "8 с · −8⚡ · осталось " + left : "пусто · ещё " + mins + " мин"}</small></button>
@@ -2445,7 +2513,8 @@ function renderPane() {
       ${S.quests.map((q, k) => q.t === "deliver" && q.i === p.i && q.j === p.j ? `<button class="btn acc" ${(S.inv[q.it] || 0) >= q.n ? "" : "disabled"} onclick="deliverQuest(${k})">🤝 Отдать: ${ITEMS[q.it].n} ×${q.n}<small>${q.who} · есть ${S.inv[q.it] || 0}</small></button>` : "").join("")}
       ${cellBase(p.i, p.j).t === "garage" && S.vehicle !== "car" ? `<button class="btn" ${lock || !(S.inv.akb >= 1 && (S.inv.parts || 0) >= 12 && (S.inv.fuel || 0) >= 1) ? "disabled" : ""} onclick="actRepairCar()">🚗 Починить машину<small>аккумулятор, 12 деталей, бензин</small></button>` : ""}
       ${here.t === "camp" ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openCamp()">🏫 Лагерь<small>${(S.story || {}).t2 === 2 ? "ждут воду и бинты" : "медсестра, лавка"}</small></button>` : ""}
-      ${here.t === "metro" && here.poi && here.poi.link ? `<button class="btn" ${lock ? "disabled" : ""} onclick="actTunnel()">🚇 Тоннель → ${POI_BY(here.poi.link).n.replace("Метро ", "")}<small>20 с · −10⚡ · безопасная станция</small></button>` : ""}
+      ${here.t === "metro" && here.poi ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openMetro()">🚇 Метро<small>тоннели к открытым станциям</small></button>` : ""}
+      ${here.t === "hospital" && c.o ? `<button class="btn acc" ${lock || Date.now() < (S.healT || 0) || p.hp >= 100 ? "disabled" : ""} onclick="actHeal()">🏥 Лечиться<small>${Date.now() < (S.healT || 0) ? "через " + Math.ceil((S.healT - Date.now()) / 60e3) + " мин" : "бесплатно · полное здоровье"}</small></button>` : ""}
       ${here.t === "highrise" ? `<button class="btn" ${lock ? "disabled" : ""} onclick="actRoof()">🔭 На крышу<small>10 с · −10⚡ · обзор 8 кл.</small></button>` : ""}
       ${isLake(here.poi) ? `<button class="btn" ${lock || (c.wl && Date.now() - c.wl < 5 * 60e3) ? "disabled" : ""} onclick="actLake()">💧 Набрать воды<small>+2 воды · риск грязной</small></button>` : ""}
       ${c.o ? `<button class="btn" ${lock ? "disabled" : ""} onclick="openGuard()">🛡 Охрана<small>${gCount(c.g) ? "сила " + gStr(c.g) + " · " + unitsTxt(c.g) : "свободных: " + (S.crew || []).filter(m => m.st === "idle").length}</small></button>` : ""}
@@ -2475,7 +2544,7 @@ function renderPane() {
   } else if (tab === "dist") {
     const qs = S.quests.map((q, k) => `<div class="row"><div class="n">❗ ${q.txt}<small>${q.i !== undefined ? cheb(q.i, q.j, p.i, p.j) + " кл. от вас · " : ""}${q.t === "capture" ? distCount(q.d) + "/" + q.need + " · " : ""}${q.money} 💰</small></div><button class="btn mini" onclick="dropQuest(${k})">✕</button></div>`).join("");
     const st = (S.story || {}).t2 || 0;
-    const story = discHtml() + `<b>Сюжет: Тастак-2</b><div class="dist"><div class="h"><span>${st >= 6 ? "★ Освобождён" : "Шаг " + st + "/5: " + STORY[st].txt}</span></div>${st < 6 ? `<i><s style="width:${(st - 1) / 5 * 100}%;background:var(--acc)"></s></i>` : ""}</div>
+    const story = discHtml() + bonusHtml() + `<b>Сюжет: Тастак-2</b><div class="dist"><div class="h"><span>${st >= 6 ? "★ Освобождён" : "Шаг " + st + "/5: " + STORY[st].txt}</span></div>${st < 6 ? `<i><s style="width:${(st - 1) / 5 * 100}%;background:var(--acc)"></s></i>` : ""}</div>
       <div class="dist"><div class="h"><span>мкр Тастак-2</span><span class="muted">${microCount(0)}/${MICRO[0].total} · ${microPct(0)}%</span></div><i><s style="width:${Math.min(100, microPct(0) / 60 * 100)}%"></s></i></div>`;
     const now = Date.now(), bl = Object.keys(S.cells).filter(k => S.cells[k].b).map(k => { const c = S.cells[k], B = BUILD[c.b.t]; const [i, j] = k.split(",").map(Number);
       const st = now < c.b.ready ? "🏗 ещё " + Math.ceil((c.b.ready - now) / 60e3) + " мин" : !c.o ? "клетка потеряна" : B.out ? "готово " + bReady(k) + " / " + bCap(k) : B.g === "hq" ? "+" + c.b.lv * 25 + "% в радиусе " + HQ_R : "работает";
