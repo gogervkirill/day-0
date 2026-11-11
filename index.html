@@ -1404,10 +1404,11 @@ const BUILD = {
   gen:    {g:"raw", n:"Генератор",   i:"🔋", d:"заряжает батарейки",                 cost:{parts:8, akb:1},     out:"batt",  every:20, cap:4, depo:"grid"},
   tower:  {g:"def", n:"Вышка",       i:"🔦", d:"обзор вокруг; набеги в радиусе 2 кл. отбиваются в 50% случаев", cost:{parts:6, rebar:2}},
   turret: {g:"def", n:"Самострел",   i:"🎯", d:"набеги на эту и соседние клетки отбиваются всегда", cost:{parts:12, batt:4, ammo:10}},
+  depot:  {g:"spec",n:"Склад",           i:"📦", d:"доступ к общему складу и крафту со склада на этой клетке", cost:{parts:8, rebar:1}},
   dorm:   {g:"spec",n:"Жилой блок",      i:"🏘", d:"+3 места для выживших за уровень", cost:{parts:10, rebar:2}},
   hq:     {g:"hq",  n:"Штаб",        i:"🏢", d:"один на игрока; постройки в радиусе 5 кл. работают быстрее: +25% за уровень", cost:{parts:20, batt:5, money:40}},
 };
-const B_GROUPS = [["raw", "Добыча: копит ресурсы, забирать на месте"], ["def", "Оборона"], ["spec", "Жильё"], ["hq", "Особое"]];
+const B_GROUPS = [["raw", "Добыча: копит ресурсы, забирать на месте"], ["def", "Оборона"], ["spec", "Лагерь"], ["hq", "Особое"]];
 const B_MAX = 3, B_MIN = [0, 2, 5, 10];   // время стройки уровня, мин
 const HQ_R = 5;
 const bCost = (t, lv) => Object.fromEntries(Object.entries(BUILD[t].cost).map(([k, n]) => [k, n * lv]));
@@ -2101,20 +2102,45 @@ function collectIncome() {
   const txt = Object.entries(got).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ");
   log(txt ? "Доход на склад: " + txt : "Дохода пока нет", txt ? "g" : ""); renderAll(); save();
 }
-function openStash() {
-  const inv = Object.entries(S.inv).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}</div><button class="btn mini" onclick="moveStash('${k}',1,1)">→ 1</button><button class="btn mini" onclick="moveStash('${k}',1,${n})">→ все</button></div>`).join("");
-  const st = Object.entries(S.stash).map(([k, n]) => `<div class="row"><div class="n">${ITEMS[k].n} ×${n}</div><button class="btn mini" onclick="moveStash('${k}',0,1)">← 1</button><button class="btn mini" onclick="moveStash('${k}',0,${n})">← все</button></div>`).join("");
-  openModal(`<h3>📦 Склад убежища</h3><p class="muted">Рюкзак ${weight().toFixed(1)}/${maxW()} кг. Склад без лимита и не теряется при смерти.</p>
-   <b>Рюкзак → склад</b>${inv || '<p class="muted">пусто</p>'}<b style="display:block;margin-top:8px">Склад → рюкзак</b>${st || '<p class="muted">пусто</p>'}
-   <div class="acts"><button class="btn acc" onclick="closeModal();renderAll()">Готово</button></div>`);
-  document.getElementById("mbox").style.maxHeight = "80vh"; document.getElementById("mbox").style.overflow = "auto";
+/* ----- склад: общий, без лимита, не теряется при смерти. Доступ: лагерь, убежище, постройка «Склад» ----- */
+const atStore = () => { const c = S.cells[key(S.p.i, S.p.j)]; return cellBase(S.p.i, S.p.j).t === "camp" || S.base === key(S.p.i, S.p.j) || !!(c && c.o && c.b && c.b.t === "depot" && bWorking(c)); };
+const ICAT = [["Еда и вода", ["can", "veg", "rusk", "water"]], ["Медицина", ["band", "medkit"]], ["Оружие и снаряжение", ["rebar", "bat", "axe", "pistol", "ammo", "emp", "molotov", "trap", "vest", "mask"]],
+  ["Материалы", ["parts", "batt", "fuel", "akb", "cable", "tires", "boards"]], ["Ценности", ["coins", "watch", "ring", "bike"]]];
+const MAT_SET = new Set([...ICAT[3][1], ...ICAT[4][1]]);
+const stashCount = () => Object.values(S.stash).reduce((a, b) => a + b, 0);
+function grouped(obj, row) {      // предметы по категориям
+  const seen = new Set(), out = ICAT.map(([t, ks]) => { const r = ks.filter(k => obj[k] > 0).map(k => { seen.add(k); return row(k, obj[k]); }).join(""); return r ? `<div class="muted" style="margin-top:6px;font-size:11px;letter-spacing:.05em;text-transform:uppercase">${t}</div>` + r : ""; }).join("");
+  return out + Object.keys(obj).filter(k => obj[k] > 0 && !seen.has(k)).map(k => row(k, obj[k])).join("");
+}
+let stashTab = 1;   // 1 — сложить (рюкзак → склад), 0 — взять
+function openStash(t) {
+  if (!atStore()) { toast("Склад доступен в лагере, в убежище и у постройки «Склад»"); return; }
+  if (t !== undefined) stashTab = t;
+  const put = stashTab === 1, src = put ? S.inv : S.stash;
+  const rows = grouped(src, (k, n) => `<div class="row"><div class="n">${ITEMS[k].n} <b>×${n}</b>${put && S.weapon === k ? ' <span class="muted">в руках</span>' : ""}<small>${(ITEMS[k].w * n).toFixed(1)} кг${!put && S.inv[k] ? " · в рюкзаке " + S.inv[k] : put && S.stash[k] ? " · на складе " + S.stash[k] : ""}</small></div><button class="btn mini" onclick="moveStash('${k}',${put ? 1 : 0},1)">1</button>${n > 1 ? `<button class="btn mini acc" onclick="moveStash('${k}',${put ? 1 : 0},${n})">все</button>` : ""}</div>`);
+  openModal(`<h3>📦 Склад</h3><p class="muted">Рюкзак <b style="color:${weight() > maxW() * .9 ? "var(--bad)" : "var(--text)"}">${weight().toFixed(1)}/${maxW()} кг</b> · на складе предметов: <b>${stashCount()}</b>. Склад общий для лагеря, убежища и построек «Склад», места в нём сколько угодно, при гибели он цел. Отсюда едят люди и берутся материалы для стройки и крафта.</p>
+    <div class="grid2"><button class="btn ${put ? "acc" : ""}" onclick="openStash(1)">⬇ Сложить<small>из рюкзака на склад</small></button><button class="btn ${put ? "" : "acc"}" onclick="openStash(0)">⬆ Взять<small>со склада в рюкзак</small></button></div>
+    ${put ? `<div class="chips" style="margin:8px 0 0;padding:0"><button class="btn" onclick="stashAll('all')">Сложить всё</button><button class="btn" onclick="stashAll('mat')">Материалы и ценности</button><button class="btn" onclick="stashAll('extra')">Оставить паёк</button></div>` : ""}
+    ${rows || `<p class="muted" style="margin-top:10px">${put ? "Рюкзак пуст." : "Склад пуст. Сюда попадает хабар с вылазок и всё, что вы сложите."}</p>`}
+    <div class="acts"><button class="btn" onclick="closeModal();renderAll()">Готово</button></div>`);
 }
 function moveStash(k, toStash, n) {
   if (toStash) { n = Math.min(n, S.inv[k] || 0); dec(k, n); S.stash[k] = (S.stash[k] || 0) + n; }
   else { n = Math.min(n, S.stash[k] || 0); const g = addItem(k, n); S.stash[k] -= g; if (S.stash[k] <= 0) delete S.stash[k]; if (g < n) toast("Рюкзак полон"); }
   save(); openStash();
 }
-const craftHub = () => cellBase(S.p.i, S.p.j).t === "camp" || S.base === key(S.p.i, S.p.j);   // склад доступен
+function stashAll(mode) {   // all — всё, кроме оружия в руках; mat — материалы и ценности; extra — всё, кроме оружия, патронов, 2 еды, 2 воды, 2 бинтов
+  const keep = {}; if (S.weapon) keep[S.weapon] = 1;
+  if (mode === "extra") { Object.assign(keep, {ammo: 1e9, water: 2, band: 2, medkit: 1, emp: 1e9, molotov: 1e9}); let food = 2; for (const k of ["can", "veg", "rusk"]) { const t = Math.min(food, S.inv[k] || 0); if (t) { keep[k] = t; food -= t; } } }
+  let n = 0; for (const k of Object.keys(S.inv)) { if (mode === "mat" && !MAT_SET.has(k)) continue; const q = (S.inv[k] || 0) - (keep[k] || 0); if (q <= 0) continue;
+    const w = S.weapon; S.inv[k] -= q; if (S.inv[k] <= 0) delete S.inv[k]; S.weapon = w; S.stash[k] = (S.stash[k] || 0) + q; n += q; }
+  toast(n ? `📦 На склад: ${n} предм.` : "Нечего складывать"); if (n) log(`📦 Сложено на склад: ${n} предм.`, "g"); save(); openStash();
+}
+function stashInvHtml() {
+  const list = grouped(S.stash, (k, n) => `<span style="display:inline-block;margin:2px 8px 2px 0">${ITEMS[k].n} <b>×${n}</b></span>`);
+  return `<b>📦 Склад · ${stashCount()} предм.</b><div class="dist">${atStore() ? `<button class="btn mini acc" onclick="openStash()">Открыть склад</button>` : `<div class="muted">Доступ: лагерь, убежище, постройка «Склад». Хабар с вылазок приходит сюда сам.</div>`}<div style="font-size:12.5px">${list || '<span class="muted">пусто</span>'}</div></div>`;
+}
+const craftHub = atStore;   // склад доступен
 const craftHave = k => (S.inv[k] || 0) + (craftHub() ? S.stash[k] || 0 : 0);
 const craftMax = r => Math.min(...Object.entries(r.need).map(([k, n]) => Math.floor(craftHave(k) / n)));
 let craftCat = "med";
@@ -2635,7 +2661,8 @@ function renderPane() {
       ${c.o ? `<button class="btn ${resting ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="resting=!resting;renderPane()">🔥 ${resting ? "Отдыхаю…" : "Отдых"}<small>×3 энергия, ×6 лечение</small></button>` : ""}
       ${c.o ? `<button class="btn" ${lock || !S.inv.trap || (c.mt || 0) >= 2 ? "disabled" : ""} onclick="actTrap()">✳ Растяжка<small>${c.mt || 0}/2 · ${S.inv.trap ? "есть " + S.inv.trap : "сделать на верстаке"}</small></button>` : ""}
       ${c.o && !isBase ? `<button class="btn" ${lock || (S.inv.parts || 0) < 10 ? "disabled" : ""} onclick="actBase()">🏠 ${S.base ? "Перенести убежище" : "Убежище"}<small>10 деталей · 20 с</small></button>` : ""}
-      ${isBase ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openStash()">📦 Склад<small>${Object.values(S.stash).reduce((a, b) => a + b, 0)} предм.</small></button>
+      ${atStore() ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openStash()">📦 Склад<small>${stashCount()} предм. · сложить и взять</small></button>` : ""}
+      ${isBase ? `
         <button class="btn ${inc ? "acc" : ""}" ${lock || !inc ? "disabled" : ""} onclick="collectIncome()">💰 Доход<small>${inc ? "готово: " + inc : "копится с клеток"}</small></button>` : ""}
       ${S.trader && S.trader.i === p.i && S.trader.j === p.j ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="openTrade()">🐪 Торговать<small>${S.money} 💰</small></button>` : ""}
       ${S.quests.map((q, k) => q.t === "deliver" && q.i === p.i && q.j === p.j ? `<button class="btn acc" ${(S.inv[q.it] || 0) >= q.n ? "" : "disabled"} onclick="deliverQuest(${k})">🤝 Отдать: ${ITEMS[q.it].n} ×${q.n}<small>${q.who} · есть ${S.inv[q.it] || 0}</small></button>` : "").join("")}
@@ -2670,7 +2697,7 @@ function renderPane() {
      ${S.vehicle ? `<div class="row"><div class="n">${S.vehicle === "bike" ? "🚲 Велосипед" : "🚗 Нива · бак " + S.tank + "/10"}<small>${S.vehicle === "bike" ? "+1 радиус, вдвое быстрее, −2⚡/кл." : "+3 радиус, втрое быстрее, 0⚡, 0.5 бензина/кл."}</small></div>${S.vehicle === "bike" ? `<button class="btn mini" onclick="dismount()">Слезть</button>` : ""}</div>` : ""}
      ${Object.keys(S.cores || {}).length ? `<b>✨ Ядра «Тұмар»</b>${Object.entries(S.cores).map(([id, lv]) => `<div class="row"><div class="n">${CORES[id].n} · ур. ${lv}<small>${CORES[id].d}</small></div></div>`).join("")}` : ""}
      <p class="muted" style="margin:0 0 6px">Вес ${weight().toFixed(1)} / ${maxW()} кг${S.vest ? " · бронежилет надет" : ""} · убито ${S.kills}</p>${rows || '<p class="muted">Пусто</p>'}
-     <button class="btn mini acc" style="margin-top:8px" onclick="openBench()">🔧 Крафт</button>`;
+     <button class="btn mini acc" style="margin:8px 0" onclick="openBench()">🔧 Крафт</button>${stashInvHtml()}`;
   } else if (tab === "dist") {
     const qs = S.quests.map((q, k) => `<div class="row"><div class="n">❗ ${q.txt}<small>${q.i !== undefined ? cheb(q.i, q.j, p.i, p.j) + " кл. от вас · " : ""}${q.t === "capture" ? distCount(q.d) + "/" + q.need + " · " : ""}${q.money} 💰</small></div><button class="btn mini" onclick="dropQuest(${k})">✕</button></div>`).join("");
     const st = (S.story || {}).t2 || 0;
