@@ -526,7 +526,7 @@ function newState() {
     inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
     cells: {}, log: [], kills: 0, deaths: 0, gps: false,
     xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
-    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "scrap", showDist: false, disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, stat: {}, guide: 0,
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "scrap", showDist: false, disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, mods: {}, stat: {}, guide: 0,
   };
 }
 function migrateCells(l) {  // старая клетка 250 м (i,j) = четыре новых 125 м: (2i..2i+1, 2j..2j+1)
@@ -864,7 +864,7 @@ function draw() {
   (S.caches || []).forEach(c => mark(c.i, c.j, "🧰"));
   (S.lost || []).forEach(l => mark(l.i, l.j, "🙋"));
   { const [hi, hj] = hub(), [ax, ay] = toScr(...cellCenter(hi, hj));
-    if (pickMode) { const R = MISSION[pickMode.type].maxD, [rx, ry] = toScr(OX + (hi - R) * CELL, OY + (hj + R + 1) * CELL);
+    if (pickMode) { const R = mMax(pickMode.type), [rx, ry] = toScr(OX + (hi - R) * CELL, OY + (hj + R + 1) * CELL);
       ctx.strokeStyle = "rgba(95,191,106,.9)"; ctx.setLineDash([8, 6]); ctx.lineWidth = 2; ctx.strokeRect(rx, ry, cs * (2 * R + 1), cs * (2 * R + 1)); ctx.setLineDash([]); }
     (S.missions || []).forEach(ms => { const [bx, by] = toScr(...cellCenter(ms.i, ms.j)), f = Math.min(1, (now - ms.t0) / (ms.end - ms.t0)), q = f < .5 ? f * 2 : 2 - f * 2;
       ctx.strokeStyle = "rgba(95,191,106,.7)"; ctx.setLineDash([5, 5]); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
@@ -1349,7 +1349,7 @@ const WEAR_H = 1;                 // % в час
 function bCond(c, now = Date.now()) {
   if (!c || !c.b) return 0; if (now < c.b.ready) return 100;
   const w = c.b.w || c.b.ready, wh = c.b.wh === undefined ? 100 : c.b.wh;
-  return Math.max(0, wh - Math.max(0, now - w) / 3600e3 * WEAR_H * (1 - .2 * coreLv("repair")));
+  return Math.max(0, wh - Math.max(0, now - w) / 3600e3 * WEAR_H * (1 - .2 * coreLv("repair")) * (mod("workshop") ? .5 : 1));
 }
 const condMult = cond => cond >= 50 ? 1 : Math.max(.2, cond / 50);
 const repairParts = c => Math.ceil((100 - bCond(c)) / 10);
@@ -1589,7 +1589,7 @@ function hurtBuilding(c, dmg, now = Date.now()) { c.b.wh = Math.max(0, bCond(c, 
 /* Охрана клетки — выжившие из отряда (c.g = [id]). Сила: 15 + боец×8 + уровень×3 */
 const guardStr = m => 15 + m.s.fight * 8 + m.lv * 3;
 const guards = g => (Array.isArray(g) ? g : []).map(crewBy).filter(m => m && m.st === "guard");
-const gStr = g => Math.round(guards(g).reduce((a, m) => a + guardStr(m), 0) * (ctl("police") ? 1.3 : 1));
+const gStr = g => Math.round(guards(g).reduce((a, m) => a + guardStr(m), 0) * (ctl("police") ? 1.3 : 1) * (mod("wall") ? 1.2 : 1));
 const gCount = g => guards(g).length;
 const unitsTxt = g => guards(g).map(m => m.n).join(", ") || "нет";
 function openGuard() {
@@ -1723,7 +1723,7 @@ const NAMES = ["Айдар","Дана","Ерлан","Асель","Тимур","�
 const STATUS = {idle:"в лагере", mission:"на вылазке", work:"на постройке", guard:"в охране", hurt:"ранен(а)"};
 const HUB_NAME = () => S.base ? "убежище" : "лагерь";
 const hub = () => S.base ? kij(S.base) : [START.i, START.j];
-const crewCap = () => { let n = 2 + (S.base ? 2 : 0) + 3 * ctl("mall"); for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === "dorm" && bWorking(c)) n += 3 * c.b.lv; } return n; };
+const crewCap = () => { let n = 2 + (S.base ? 2 : 0) + 3 * ctl("mall") + 2 * mod("beds"); for (const k in S.cells) { const c = S.cells[k]; if (c.b && c.b.t === "dorm" && bWorking(c)) n += 3 * c.b.lv; } return n; };
 const crewBy = id => (S.crew || []).find(m => m.id === id);
 function newSurvivor(prof) {
   const p = prof || pick(SK), s = {}; SK.forEach(k => s[k] = 1); s[p] = rnd(2, 3); s[pick(SK)] += 1;
@@ -1740,7 +1740,7 @@ function crewXp(m, n) { m.xp += n; const need = 30 + m.lv * 25; if (m.xp >= need
 /* ----- находка выживших на карте ----- */
 function lostTick(now) {
   S.lost = (S.lost || []).filter(l => now < l.until);
-  if (S.lost.length >= 2 || (S.crew || []).length >= crewCap() + 1 || Math.random() > .04) return;
+  if (S.lost.length >= 2 || (S.crew || []).length >= crewCap() + 1 || Math.random() > .04 * (1 + mod("radio"))) return;
   const c = randCellAt(4, 14, (a, b) => !safeCell(a, b) && !nearCamp(a, b)); if (!c) return;
   S.lost.push({i: c[0], j: c[1], until: now + 45 * 60e3, m: newSurvivor()}); dirty = true;
   if (S.lost.length === 1) log("📻 Сквозь помехи: кто-то просит о помощи — отметка 🙋 на карте", "a");
@@ -1764,10 +1764,10 @@ let lastCrewTick = Date.now();
 function crewTick(now) {
   if (now - lastCrewTick < 60e3) return; const h = (now - lastCrewTick) / 3600e3; lastCrewTick = now;
   const crew = S.crew || []; if (!crew.length) return;
-  S.ration = (S.ration || 0) + crew.length * h * (ctl("park") ? .75 : 1);                // накопленный долг пайков
+  S.ration = (S.ration || 0) + crew.length * h * (ctl("park") ? .75 : 1) * (mod("kitchen") ? .75 : 1);                // накопленный долг пайков
   let hungry = 0;
   while (S.ration >= 1) { S.ration--; const f = FOOD_IT.some(takeRation), w = takeRation("water"); if (!f || !w) hungry++; }
-  const medHeal = (crew.some(m => m.p === "med" && m.st !== "mission") ? 2 : 1) * (ctl("hospital") ? 2 : 1);
+  const medHeal = (crew.some(m => m.p === "med" && m.st !== "mission") ? 2 : 1) * (ctl("hospital") ? 2 : 1) * (mod("infirmary") ? 2 : 1);
   for (const m of [...crew]) {
     if ((m.st === "work" && !(S.cells[m.job] || {}).b) || (m.st === "guard" && !(S.cells[m.job] || {}).o)) unassign(m);
     if (hungry > 0) { m.mo -= 15; hungry--; } else m.mo = Math.min(100, m.mo + 10 * h);
@@ -1781,36 +1781,114 @@ function crewTick(now) {
 const MISSION = {
   scav:  {n:"Добыча",   i:"🎒", d:"обыскать клетку и принести хабар на склад", maxD: 10},
   scout: {n:"Разведка", i:"🔭", d:"разведать местность вокруг клетки, найти ловушки и тайники", maxD: 14},
+  capture:{n:"Захват клетки", i:"🚩", d:"занять разведанную клетку — территория растёт без вас", maxD: 10},
+  houses:{n:"Обход домов", i:"🏘", d:"обыскать до 3 ближайших жилых клеток, хабар на склад", auto: true},
+  collect:{n:"Сбор продукции", i:"📦", d:"обойти ваши постройки и принести готовое на склад", auto: true},
 };
+const mMax = t => MISSION[t].maxD + 4 * mod("radio");
+/* Улучшения убежища: покупаются один раз (спальни — до 3 уровней), действуют, пока убежище есть */
+const MODS = {
+  beds:     {n:"Спальни",    i:"🛏", d:"+2 места для выживших за уровень", max: 3, cost:{parts:8, rebar:1}},
+  kitchen:  {n:"Кухня",      i:"🍲", d:"отряд ест на четверть меньше", max: 1, cost:{parts:10, water:3}},
+  infirmary:{n:"Лазарет",    i:"⛑", d:"раненые лечатся вдвое быстрее", max: 1, cost:{parts:10, band:4}},
+  radio:    {n:"Радиорубка", i:"📻", d:"выжившие 🙋 появляются вдвое чаще, дальность вылазок +4 кл.", max: 1, cost:{parts:10, batt:4}},
+  workshop: {n:"Мастерская", i:"🔧", d:"постройки изнашиваются вдвое медленнее", max: 1, cost:{parts:14, rebar:2}},
+  wall:     {n:"Частокол",   i:"🧱", d:"охрана клеток сильнее на 20%, набеги на 20% реже", max: 1, cost:{parts:16, rebar:4}},
+};
+const mod = k => S.base ? (S.mods || {})[k] || 0 : 0;
+const modCost = k => Object.fromEntries(Object.entries(MODS[k].cost).map(([it, n]) => [it, n * (mod(k) + 1)]));
+function openBase() {
+  if (!S.base) { openModal(`<h3>🏠 Убежище</h3><p>Убежища пока нет. Захватите клетку и нажмите «🏠 Убежище» (10 деталей): появятся склад, точка возрождения, +2 места для людей и улучшения ниже.</p>
+    ${Object.values(MODS).map(M => `<div class="row" style="opacity:.55"><div class="n">${M.i} ${M.n}<small>${M.d}</small></div></div>`).join("")}<div class="acts"><button class="btn" onclick="closeModal()">Закрыть</button></div>`); return; }
+  const [bi, bj] = kij(S.base), crew = S.crew || [];
+  const rows = Object.entries(MODS).map(([k, M]) => { const lv = mod(k), cost = modCost(k), full = lv >= M.max, ok = !full && canPay(cost);
+    return `<div class="row"><div class="n">${M.i} ${M.n}${M.max > 1 ? ` <span class="muted">${lv}/${M.max}</span>` : lv ? ' <span style="color:var(--good)">✔</span>' : ""}<small>${M.d}</small>${full ? "" : `<small>${costTxt(cost)}</small>`}</div>${full ? "" : `<button class="btn mini ${ok ? "acc" : ""}" ${ok ? "" : "disabled"} onclick="buyMod('${k}')">${lv ? "Улучшить" : "Построить"}</button>`}</div>`; }).join("");
+  openModal(`<h3>🏠 Убежище</h3><p class="muted">${cellBase(bi, bj).n}${streetOf(bi, bj) ? " · " + streetOf(bi, bj) : ""} · ${cheb(bi, bj, S.p.i, S.p.j)} кл. от вас<br>Людей ${crew.length}/${crewCap()} · на складе предметов: ${Object.values(S.stash).reduce((a, b) => a + b, 0)}. Материалы берутся из рюкзака и со склада.</p>
+    <b>Улучшения</b>${rows}<div class="acts"><button class="btn" onclick="closeModal();centerOnHub()">Показать на карте</button><button class="btn" onclick="closeModal();renderAll()">Закрыть</button></div>`);
+}
+function buyMod(k) {
+  const M = MODS[k], cost = modCost(k); if (!S.base || mod(k) >= M.max || !canPay(cost)) return;
+  pay(cost); (S.mods = S.mods || {})[k] = mod(k) + 1; log(`🏠 Убежище: ${M.i} ${M.n}${M.max > 1 ? " ур. " + S.mods[k] : ""} — ${M.d}`, "g"); gainXp(10); buzz(30); save(); openBase();
+}
+/* Назначение человека на постройку или в охрану из списка, не подходя к клетке */
+function openAssign(id) {
+  const m = crewBy(id); if (!m || m.st !== "idle") return; const own = Object.keys(S.cells).filter(k => S.cells[k].o), dist = k => cheb(...kij(k), ...hub());
+  const builds = own.filter(k => { const b = S.cells[k].b; return b && BUILD[b.t].g === "raw" && bWorking(S.cells[k]) && workers(S.cells[k]).length < 2; }).sort((a, b) => dist(a) - dist(b)).slice(0, 8);
+  const posts = own.filter(k => gCount(S.cells[k].g) < 3).sort((a, b) => (poiAt.has(b) - poiAt.has(a)) || (!!S.cells[b].b - !!S.cells[a].b) || dist(a) - dist(b)).slice(0, 8);
+  openModal(`<h3>${PROF[m.p].i} ${m.n}</h3><p class="muted">${PROF[m.p].n} · ${skTxt(m)}<br>Инженер полезнее на постройке, боец — в охране.</p>
+    <b>На постройку</b> <span class="muted">(+${20 + m.s.eng * 5}% выработки)</span>${builds.map(k => { const c = S.cells[k], B = BUILD[c.b.t]; return `<div class="row"><div class="n">${B.i} ${B.n} ур. ${bLv(c)}<small>${cellBase(...kij(k)).n} · работников ${workers(c).length}/2</small></div><button class="btn mini acc" onclick="assignJob(${id},'${k}','work')">Назначить</button></div>`; }).join("") || '<p class="muted">Нет добывающих построек со свободным местом.</p>'}
+    <b>В охрану</b> <span class="muted">(сила ${guardStr(m)})</span>${posts.map(k => { const c = S.cells[k]; return `<div class="row"><div class="n">${poiAt.has(k) ? "⭐ " : c.b ? BUILD[c.b.t].i + " " : ""}${cellBase(...kij(k)).n}<small>охрана ${gCount(c.g)}/3${gCount(c.g) ? " · сила " + gStr(c.g) : ""}</small></div><button class="btn mini acc" onclick="assignJob(${id},'${k}','guard')">Поставить</button></div>`; }).join("") || '<p class="muted">Нет своих клеток.</p>'}
+    <div class="acts"><button class="btn" onclick="closeModal();renderAll()">Закрыть</button></div>`);
+}
+function assignJob(id, k, kind) {
+  const m = crewBy(id), c = S.cells[k]; if (!m || m.st !== "idle" || !c || !c.o) return;
+  if (kind === "work") { if (!c.b || workers(c).length >= 2) return; (c.b.wk = c.b.wk || []).push(id); m.st = "work"; m.job = k; log(`🔧 ${m.n} работает: ${BUILD[c.b.t].n}`, "g"); }
+  else { if (!Array.isArray(c.g)) c.g = []; if (gCount(c.g) >= 3) return; c.g.push(id); m.st = "guard"; m.job = k; log(`🛡 ${m.n} охраняет ${cellBase(...kij(k)).n}`, "g"); }
+  closeModal(); renderAll(); save();
+}
+/* Поручения без выбора цели: обход домов и сбор продукции; rep — повторять, пока есть что делать */
+const HOME_T = ["res", "private", "highrise"];
+function autoPlan(type, team) {
+  const [hi, hj] = hub(), sum = k => team.reduce((a, m) => a + m.s[k], 0), h = new Date().getHours(), night = h >= 21 || h < 6, now = Date.now();
+  if (type === "houses") {
+    const cells = []; for (let dj = -8; dj <= 8; dj++) for (let di = -8; di <= 8; di++) { const i = hi + di, j = hj + dj; if (!inGrid(i, j) || !inCity[j * GW + i]) continue;
+      const c = S.cells[key(i, j)]; if (!c || !c.e || safeCell(i, j) || !HOME_T.includes(cellBase(i, j).t)) continue;
+      const z = zoneOf[j * GW + i]; if (z >= 0 && POIS[z].f && poiAlive(z)) continue;
+      if ((c.lc || 0) >= 3 && c.ls && now - c.ls < RESPAWN) continue; cells.push([i, j, cheb(i, j, hi, hj)]); }
+    cells.sort((a, b) => a[2] - b[2]); const pickd = cells.slice(0, 3); if (!pickd.length) return null;
+    return {cells: pickd.map(c => [c[0], c[1]]), i: pickd[0][0], j: pickd[0][1], dur: Math.round(5 + pickd.reduce((a, c) => a + c[2], 0) * .7 / (1 + .08 * sum("scout"))),
+      risk: Math.max(.03, .07 + (night ? .08 : 0) - sum("fight") * .03 - (team.length - 1) * .03), rolls: 1 + Math.floor(sum("scav") / 3), radius: 0};
+  }
+  const bl = Object.keys(S.cells).filter(k => bTicks(k) > 0); if (!bl.length) return null; const [i, j] = kij(bl[0]);
+  return {i, j, dur: Math.round(3 + bl.length * 1.5), risk: .02, rolls: 0, radius: 0};
+}
+function launchAuto(type, ids, rep, quiet) {
+  ids = ids || [...document.querySelectorAll(".sendc:checked")].map(e => +e.value); if (!ids.length) { toast("Отметьте хотя бы одного"); return false; }
+  if (rep === undefined) rep = !!(document.getElementById("sendRep") || {}).checked;
+  const team = ids.map(crewBy).filter(Boolean); if (team.length !== ids.length || team.some(m => m.st !== "idle")) return false;
+  const pl = autoPlan(type, team);
+  if (!pl) { if (!quiet) toast(type === "houses" ? "Рядом нет необысканных домов: разведайте район вокруг базы" : "В постройках пока нечего забирать"); return false; }
+  const now = Date.now(); team.forEach(m => m.st = "mission"); bump("missions"); closeModal();
+  (S.missions = S.missions || []).push(Object.assign({type, ids, t0: now, end: now + pl.dur * 60e3, rep}, pl));
+  if (!quiet) log(`${MISSION[type].i} ${MISSION[type].n}: ${team.map(m => m.n).join(", ")} (${pl.dur} мин${rep ? ", с повтором" : ""})`, "a"); renderAll(); save(); return true;
+}
+function stopRepeats() { (S.missions || []).forEach(m => delete m.rep); toast("Повторы остановлены: люди вернутся и останутся в лагере"); renderAll(); save(); }
 let pickMode = null;    // выбор цели на карте: {type, ids}
 function missionCalc(type, ids, i, j) {
   const team = ids.map(crewBy).filter(Boolean), [hi, hj] = hub(), d = cheb(i, j, hi, hj);
   const sum = k => team.reduce((a, m) => a + m.s[k], 0), z = zoneFaction(i, j), h = new Date().getHours(), night = h >= 21 || h < 6;
-  const dur = Math.round((type === "scav" ? 4 : 3) + d * 0.8 / (1 + .08 * sum("scout")));     // минуты
-  const risk = Math.max(.03, Math.min(.85, (z ? .3 : .08) + (night ? .1 : 0) + d * .01 + (baseTrap(i, j) && !(S.cells[key(i, j)] || {}).td ? .1 : 0) - sum("fight") * .035 - (team.length - 1) * .04));
+  const dur = Math.round((type === "scav" ? 4 : type === "capture" ? 7 : 3) + d * 0.8 / (1 + .08 * sum("scout")));     // минуты
+  const risk = Math.max(.03, Math.min(.85, (z ? .3 : .08) + (type === "capture" ? .08 : 0) + (night ? .1 : 0) + d * .01 + (baseTrap(i, j) && !(S.cells[key(i, j)] || {}).td ? .1 : 0) - sum("fight") * .035 - (team.length - 1) * .04));
   return {team, d, dur, risk, rolls: type === "scav" ? 1 + Math.ceil(sum("scav") / 2) : 0, radius: type === "scout" ? 2 + Math.floor(sum("scout") / 3) : 0};
 }
 function openSend() {
   const idle = (S.crew || []).filter(m => m.st === "idle");
   if (!idle.length) { toast("Нет свободных людей"); return; }
-  openModal(`<h3>🚩 Новая вылазка</h3><p class="muted">Выберите людей и задачу, затем коснитесь клетки на карте. Вылазки идут от: ${HUB_NAME()}.</p>
-    ${idle.map(m => `<label class="row" style="cursor:pointer"><div class="n">${PROF[m.p].i} ${m.n} · ур. ${m.lv}<small>${skTxt(m)} · HP ${Math.round(m.hp)} · мораль ${Math.round(m.mo)}</small></div><input type="checkbox" class="sendc" value="${m.id}" ${idle.length === 1 ? "checked" : ""}></label>`).join("")}
-    <div class="acts">${Object.entries(MISSION).map(([t, M]) => `<button class="btn acc" onclick="startPick('${t}')">${M.i} ${M.n}<small>${M.d}, до ${M.maxD} кл.</small></button>`).join("")}
+  openModal(`<h3>🚩 Поручение</h3><p class="muted">Отметьте людей и выберите задачу. Отряд выходит от: ${HUB_NAME()}.</p>
+    ${idle.map(m => `<label class="row" style="cursor:pointer"><div class="n">${PROF[m.p].i} ${m.n} · ур. ${m.lv}<small>${skTxt(m)} · HP ${Math.round(m.hp)} · мораль ${Math.round(m.mo)}</small></div><input type="checkbox" class="sendc" value="${m.id}" ${idle.length === 1 ? "checked" : ""} style="width:20px;height:20px"></label>`).join("")}
+    <b>Сами найдут цель</b>
+    <div class="acts">${Object.entries(MISSION).filter(([, M]) => M.auto).map(([t, M]) => `<button class="btn acc" onclick="launchAuto('${t}')">${M.i} ${M.n}<small>${M.d}</small></button>`).join("")}
+    <label class="row" style="cursor:pointer;border:0;padding:2px 4px"><div class="n">♻ Повторять<small>после возвращения идти снова, пока есть что делать</small></div><input type="checkbox" id="sendRep" style="width:20px;height:20px"></label></div>
+    <b>Цель на карте</b>
+    <div class="acts">${Object.entries(MISSION).filter(([, M]) => !M.auto).map(([t, M]) => `<button class="btn" onclick="startPick('${t}')">${M.i} ${M.n}<small>${M.d}, до ${mMax(t)} кл.</small></button>`).join("")}
     <button class="btn" onclick="closeModal()">Отмена</button></div>`);
 }
 function startPick(type) {
   const ids = [...document.querySelectorAll(".sendc:checked")].map(e => +e.value); if (!ids.length) { toast("Отметьте хотя бы одного"); return; }
-  pickMode = {type, ids}; closeModal(); if (cam.s > .25 || cam.s < .05) cam.s = .09; centerOnHub(); toast(`${MISSION[type].i} Коснитесь клетки для «${MISSION[type].n}» (до ${MISSION[type].maxD} кл.)`); renderAll();
+  pickMode = {type, ids}; closeModal(); if (cam.s > .25 || cam.s < .05) cam.s = .09; centerOnHub(); toast(`${MISSION[type].i} Коснитесь клетки для «${MISSION[type].n}» (до ${mMax(type)} кл.)`); renderAll();
 }
 function centerOnHub() { const [hi, hj] = hub(); [cam.x, cam.y] = cellCenter(hi, hj); dirty = true; }
 function pickTarget(i, j) {
   const pm = pickMode, M = MISSION[pm.type], [hi, hj] = hub(), d = cheb(i, j, hi, hj);
-  if (d > M.maxD) { toast(`Слишком далеко от ${HUB_NAME() === "лагерь" ? "лагеря" : "убежища"}: ${d} кл., максимум ${M.maxD}`); return; }
+  if (d > mMax(pm.type)) { toast(`Слишком далеко от ${HUB_NAME() === "лагерь" ? "лагеря" : "убежища"}: ${d} кл., максимум ${mMax(pm.type)}`); return; }
+  if (pm.type === "capture") { const cc = S.cells[key(i, j)] || {}, z = zoneOf[j * GW + i];
+    if (!cc.e) { toast("Сначала разведайте клетку"); return; } if (cc.o) { toast("Клетка уже ваша"); return; } if (safeCell(i, j)) { toast("Нейтральная территория"); return; }
+    if (z >= 0 && POIS[z].f && poiAlive(z)) { toast("Зону держит " + POIS[z].n + ": сначала зачистите её центр сами"); return; } }
   if (pm.type === "scav" && !(S.cells[key(i, j)] || {}).e) { toast("Для добычи нужна разведанная клетка — сначала разведка"); return; }
   const r = missionCalc(pm.type, pm.ids, i, j);
   openModal(`<h3>${M.i} ${M.n}: ${cellBase(i, j).n}</h3><p class="muted">${describe(i, j)} · ${d} кл. от ${HUB_NAME() === "лагерь" ? "лагеря" : "убежища"}</p>
     <p>Отряд: ${r.team.map(m => PROF[m.p].i + m.n).join(", ")}<br>Время: <b>${r.dur} мин</b> · риск: <b style="color:${r.risk > .4 ? "var(--bad)" : r.risk > .2 ? "var(--acc)" : "var(--good)"}">${Math.round(r.risk * 100)}%</b>
-    ${pm.type === "scav" ? `<br>Находок: до ${r.rolls}` : `<br>Радиус разведки: ${r.radius} кл.`}</p>
+    ${pm.type === "scav" ? `<br>Находок: до ${r.rolls}` : pm.type === "capture" ? `<br>Если отряд не нарвётся на засаду, клетка станет вашей` : `<br>Радиус разведки: ${r.radius} кл.`}</p>
     <p class="muted">Риск снижают бойцы и численность, повышают зоны банд и ИИ, ночь, ловушки, дальность. Медик в отряде может спасти раненого.</p>
     <div class="acts"><button class="btn acc" onclick="launchMission(${i},${j})">Отправить</button><button class="btn" onclick="pickMode=null;closeModal();renderAll()">Отмена</button></div>`);
 }
@@ -1823,7 +1901,8 @@ function launchMission(i, j) {
 }
 function resolveMission(ms) {
   const team = ms.ids.map(crewBy).filter(Boolean), M = MISSION[ms.type], c = C(key(ms.i, ms.j)), got = {}, notes = [];
-  if (Math.random() < ms.risk) {          // стычка или ловушка
+  const hit = Math.random() < ms.risk;
+  if (hit) {          // стычка или ловушка
     const v = pick(team), dmg = rnd(30, 65); v.hp -= dmg;
     if (v.hp <= 0) {
       if (team.some(m => m.p === "med" && m !== v) && Math.random() < .6) { v.hp = 15; v.st = "hurt"; notes.push(`${v.n} тяжело ранен(а), медик спас`); }
@@ -1836,6 +1915,18 @@ function resolveMission(ms) {
     for (let n = 0; n < ms.rolls; n++) { let v = Math.random() * tot; for (const [it, w, mn, mx] of table) { if ((v -= w) <= 0) { if (it !== "bike") got[it] = (got[it] || 0) + rnd(mn, mx); break; } } }
     for (const it in got) S.stash[it] = (S.stash[it] || 0) + got[it];
     c.e = 1; c.lc = Math.min(3, (c.lc || 0) + 1); c.ls = Date.now();
+  } else if (ms.type === "capture") {
+    if (hit) notes.push("засада: клетку взять не удалось");
+    else if (!c.o) { c.e = 1; c.o = 1; c.oc = c.oy = Date.now(); if (baseTrap(ms.i, ms.j)) c.td = 1; const d = distOf[ms.j * GW + ms.i]; questProgress("capture", d); notes.push("клетка захвачена"); gainXp(6); }
+  } else if (ms.type === "houses") {
+    for (const [i, j] of ms.cells || []) { const cc = C(key(i, j)), table = LOOT[cellBase(i, j).t] || LOOT.res, tot = table.reduce((a, x) => a + x[1], 0);
+      for (let n = 0; n < ms.rolls; n++) { let v = Math.random() * tot; for (const [it, w, mn, mx] of table) { if ((v -= w) <= 0) { if (it !== "bike") got[it] = (got[it] || 0) + rnd(mn, mx); break; } } }
+      if (cc.ls && Date.now() - cc.ls >= RESPAWN) cc.lc = 0; cc.lc = Math.min(3, (cc.lc || 0) + 1); cc.ls = Date.now(); }
+    for (const it in got) S.stash[it] = (S.stash[it] || 0) + got[it]; notes.push("домов: " + (ms.cells || []).length);
+  } else if (ms.type === "collect") {
+    const now = Date.now(); for (const k in S.cells) { const ticks = bTicks(k, now); if (!ticks) continue; const cb = S.cells[k].b, B = BUILD[cb.t], ev = bEvery(k);
+      if (Math.floor((now - cb.y) / ev) > ticks) cb.y = now - ticks * ev; cb.y += ticks * ev; got[B.out] = (got[B.out] || 0) + ticks * bPerTick(k); }
+    for (const it in got) S.stash[it] = (S.stash[it] || 0) + got[it];
   } else {
     reveal(ms.i, ms.j, ms.radius, true);
     if (Math.random() < .3) { const a = ms.i + rnd(-ms.radius, ms.radius), b = ms.j + rnd(-ms.radius, ms.radius); if (inGrid(a, b) && inCity[b * GW + a]) { (S.caches = S.caches || []).push({i: a, j: b, until: Date.now() + 60 * 60e3}); notes.push("найден 🧰 тайник"); } }
@@ -1843,12 +1934,15 @@ function resolveMission(ms) {
   }
   team.forEach(m => { if (S.crew.includes(m) && m.st === "mission") m.st = "idle"; crewXp(m, ms.type === "scav" ? 8 : 6); });
   const loot = Object.entries(got).map(([k, n]) => ITEMS[k].n + " ×" + n).join(", ");
-  log(`${M.i} ${M.n} у «${cellBase(ms.i, ms.j).n}» завершена${loot ? ": на склад — " + loot : ms.type === "scout" ? ": разведано " + (2 * ms.radius + 1) + "×" + (2 * ms.radius + 1) + " кл." : ": пусто"}${notes.length ? " · " + notes.join(", ") : ""}`, notes.some(n => n.includes("💀")) ? "b" : "g");
+  log(`${M.i} ${M.n}${M.auto ? "" : " у «" + cellBase(ms.i, ms.j).n + "»"}: готово${loot ? ": на склад — " + loot : ms.type === "scout" ? ": разведано " + (2 * ms.radius + 1) + "×" + (2 * ms.radius + 1) + " кл." : ": пусто"}${notes.length ? " · " + notes.join(", ") : ""}`, notes.some(n => n.includes("💀")) ? "b" : "g");
   dirty = true;
 }
 function missionTick(now) {
   const done = (S.missions || []).filter(ms => now >= ms.end); if (!done.length) return;
-  S.missions = S.missions.filter(ms => now < ms.end); done.forEach(resolveMission); renderAll(); save();
+  S.missions = S.missions.filter(ms => now < ms.end); done.forEach(resolveMission);
+  done.forEach(ms => { if (!ms.rep) return; const ok = ms.ids.every(id => { const m = crewBy(id); return m && m.st === "idle"; }) && launchAuto(ms.type, ms.ids, true, true);
+    if (!ok) log(`♻ ${MISSION[ms.type].n}: повтор остановлен (${ms.ids.every(id => crewBy(id) && crewBy(id).st === "idle") ? "больше нечего делать" : "отряд не в строю"})`, "a"); });
+  renderAll(); save();
 }
 
 /* ----- работники на постройках ----- */
@@ -1867,11 +1961,12 @@ function renderCrew(el) {
   const crew = S.crew || [], ms = S.missions || [], now = Date.now();
   const food = FOOD_IT.reduce((a, k) => a + (S.stash[k] || 0) + (S.inv[k] || 0), 0), water = (S.stash.water || 0) + (S.inv.water || 0);
   el.innerHTML = `<div class="dist"><div class="h"><span>Отряд ${crew.length}/${crewCap()}</span><span class="muted">еда ${food} · вода ${water} · хватит на ${crew.length ? Math.floor(Math.min(food, water) / crew.length) : "∞"} ч</span></div></div>
-    <div class="grid2" style="margin:6px 0"><button class="btn acc" ${crew.some(m => m.st === "idle") ? "" : "disabled"} onclick="openSend()">🚩 Вылазка<small>добыча, разведка</small></button>
-    <button class="btn" onclick="centerOnHub()">🏠 ${S.base ? "Убежище" : "Лагерь"}<small>${S.base ? "вылазки идут отсюда" : "обустройте убежище: +2 места"}</small></button></div>
+    <div class="grid2" style="margin:6px 0"><button class="btn acc" ${crew.some(m => m.st === "idle") ? "" : "disabled"} onclick="openSend()">🚩 Поручение<small>дома, сбор, захват, разведка</small></button>
+    <button class="btn ${S.base ? "" : "acc"}" onclick="openBase()">🏠 Убежище<small>${S.base ? "улучшений: " + Object.values(S.mods || {}).reduce((a, b) => a + b, 0) + "/" + Object.values(MODS).reduce((a, M) => a + M.max, 0) : "ещё не обустроено"}</small></button></div>
+    ${ms.some(m => m.rep) ? `<button class="btn mini" style="margin-bottom:6px" onclick="stopRepeats()">⏹ Остановить повторы</button>` : ""}
     ${pickMode ? `<p style="color:var(--acc)">Выбор цели: коснитесь клетки на карте · <a href="#" onclick="pickMode=null;renderAll();return false">отмена</a></p>` : ""}
-    ${ms.length ? `<b>Вылазки</b>` + ms.map(m => `<div class="row"><div class="n">${MISSION[m.type].i} ${MISSION[m.type].n} → ${cellBase(m.i, m.j).n}<small>${m.ids.map(id => (crewBy(id) || {}).n).filter(Boolean).join(", ")} · ещё ${Math.max(0, Math.ceil((m.end - now) / 60e3))} мин · риск ${Math.round(m.risk * 100)}%</small></div></div>`).join("") : ""}
-    <b style="display:block;margin-top:8px">Люди</b>${crew.map(m => `<div class="row"><div class="n">${PROF[m.p].i} ${m.n} · ${PROF[m.p].n} · ур. ${m.lv}<small>${skTxt(m)}</small><small>${STATUS[m.st]}${m.st === "work" && m.job ? ": " + BUILD[(S.cells[m.job].b || {}).t]?.n : m.st === "guard" && m.job ? ": " + cellBase(...kij(m.job)).n : ""} · HP ${Math.round(m.hp)} · мораль <span style="color:${m.mo < 30 ? "var(--bad)" : "inherit"}">${Math.round(m.mo)}</span></small></div>${m.st === "work" || m.st === "guard" ? `<button class="btn mini" onclick="unassign(crewBy(${m.id}));renderAll();save()">Снять</button>` : ""}</div>`).join("") || `<p class="muted">Пока никого. Ищите 🙋 на карте и слушайте рацию.</p>`}
+    ${ms.length ? `<b>Вылазки</b>` + ms.map(m => `<div class="row"><div class="n">${MISSION[m.type].i} ${MISSION[m.type].n}${m.rep ? " ♻" : ""}${MISSION[m.type].auto ? "" : " → " + cellBase(m.i, m.j).n}<small>${m.ids.map(id => (crewBy(id) || {}).n).filter(Boolean).join(", ")} · ещё ${Math.max(0, Math.ceil((m.end - now) / 60e3))} мин · риск ${Math.round(m.risk * 100)}%</small></div></div>`).join("") : ""}
+    <b style="display:block;margin-top:8px">Люди</b>${crew.map(m => `<div class="row"><div class="n">${PROF[m.p].i} ${m.n} · ${PROF[m.p].n} · ур. ${m.lv}<small>${skTxt(m)}</small><small>${STATUS[m.st]}${m.st === "work" && m.job ? ": " + BUILD[(S.cells[m.job].b || {}).t]?.n : m.st === "guard" && m.job ? ": " + cellBase(...kij(m.job)).n : ""} · HP ${Math.round(m.hp)} · мораль <span style="color:${m.mo < 30 ? "var(--bad)" : "inherit"}">${Math.round(m.mo)}</span></small></div>${m.st === "work" || m.st === "guard" ? `<button class="btn mini" onclick="unassign(crewBy(${m.id}));renderAll();save()">Снять</button>` : m.st === "idle" ? `<button class="btn mini acc" onclick="openAssign(${m.id})">Назначить</button>` : ""}</div>`).join("") || `<p class="muted">Пока никого. Ищите 🙋 на карте и слушайте рацию.</p>`}
     <p class="muted">Выжившие едят 1 еду и 1 воду в час со склада (или из рюкзака). Голодные теряют мораль и уходят. Ставьте людей на постройки (окно постройки → «Работники»): +20% выработки каждый, инженер — больше.</p>`;
 }
 /* ===== РЕЖИМ РАЗРАБОТЧИКА: расстановка объектов, тип клеток, спавн, читы ===== */
@@ -2426,7 +2521,7 @@ function raids() {
   const now = Date.now(); if (now - lastRaid < 300e3) return; lastRaid = now;
   const own = Object.keys(S.cells).filter(k => S.cells[k].o);
   const exposed = own.filter(k => { const [i, j] = k.split(",").map(Number); return !microFree(microOf[j * GW + i]) && (zoneOf[j * GW + i] >= 0 || hash(i, j, Math.floor(now / 120e3)) < .15); });
-  if (!exposed.length || Math.random() < .65 || (ctl("hideout") && Math.random() < .3)) return;
+  if (!exposed.length || Math.random() < .65 || (ctl("hideout") && Math.random() < .3) || (mod("wall") && Math.random() < .2)) return;
   const k = pick(exposed), c = S.cells[k]; const [i, j] = k.split(",").map(Number);
   if (i === S.p.i && j === S.p.j || k === S.base) return;
   const def = nearDefense(i, j);
