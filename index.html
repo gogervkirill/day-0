@@ -40,7 +40,13 @@ canvas#map{position:absolute;inset:0;width:100%;height:100%;touch-action:none;di
 #progress .pb s{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));width:0;text-decoration:none;box-shadow:0 0 10px var(--acc)}
 #progress button{margin-top:9px}
 #sheet{position:relative;z-index:2;margin-top:-16px;background:linear-gradient(180deg,#161b18,var(--panel) 60px);border-top:1px solid var(--line2);border-radius:20px 20px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5);height:42%;max-height:360px;min-height:230px;display:flex;flex-direction:column}
-#sheet:before{content:"";position:absolute;left:50%;top:6px;width:38px;height:4px;border-radius:4px;background:var(--line2);transform:translateX(-50%)}
+#sheet{transition:height .22s ease}
+#sheet.min{height:auto;min-height:0}#sheet.min #pane{display:none}#sheet.min #tabs{padding-bottom:max(8px,env(safe-area-inset-bottom))}
+#sheet.big{height:58%;max-height:none}
+#grip{height:24px;margin-bottom:-14px;cursor:grab;touch-action:none;position:relative;z-index:1}
+#grip:before{content:"";position:absolute;left:50%;top:7px;width:44px;height:5px;border-radius:5px;background:var(--line2);transform:translateX(-50%)}
+.chips{display:flex;gap:7px;overflow-x:auto;margin:10px -12px 0;padding:0 12px 2px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chips .btn{flex:0 0 auto;padding:9px 14px;font-size:13px;border-radius:999px;white-space:nowrap}.chips .btn small{display:none}
 #tabs{display:flex;gap:2px;padding:14px 8px 6px}
 #tabs button{flex:1;background:none;border:0;color:var(--dim);padding:6px 2px;font-size:11px;cursor:pointer;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:1px;transition:background .15s,color .15s}
 #tabs button .ti{font-size:18px;line-height:1.1;filter:grayscale(.6);opacity:.8;transition:filter .15s,opacity .15s}
@@ -96,7 +102,7 @@ select,input,textarea{font:inherit}
         <div class="bar">💧 <b id="vWater">100</b><i><s id="bWater" style="background:#4fb3e8"></s></i></div>
         <div class="bar">⚡ <b id="vEn">100</b><i><s id="bEn" style="background:#5fbf6a"></s></i></div>
       </div>
-      <div class="cellinfo glass" id="cellInfo">—</div>
+      <div style="display:flex;gap:6px;align-items:flex-start;justify-content:space-between"><div class="cellinfo glass" id="cellInfo">—</div><div class="cellinfo glass" id="wallet" style="white-space:nowrap;flex:0 0 auto"></div></div>
       <div class="cellinfo glass" id="scanBar" style="display:none;pointer-events:auto;border-radius:16px"></div>
       <div class="cellinfo glass" id="eventBar" style="display:none"></div>
     </div>
@@ -111,6 +117,7 @@ select,input,textarea{font:inherit}
     <div id="attrib"></div>
   </div>
   <div id="sheet">
+    <div id="grip"></div>
     <div id="tabs">
       <button data-t="act" class="on"><span class="ti">🎯</span>Действия</button>
       <button data-t="inv"><span class="ti">🎒</span>Рюкзак</button>
@@ -240,6 +247,17 @@ const POIS = [
   {n:"Метро «Сарыарка»",t:"metro",ll:[76.85822,43.22371]},
   {n:"Метро «Момышулы»",t:"metro",ll:[76.83784,43.21640]},
 ];
+const CELL_ICON = {shop:"🛒", pharm:"💊", hospital:"🏥", police:"🚓", garage:"🔧", industrial:"🏭", mall:"🏬", market:"🏪", station:"🚉", cemetery:"✝", military:"🎖", private:"🏡", tower:"📡", power:"⚡"};
+function edgeMark(i, j, ic, col) {   // указатель у края экрана на цель за кадром
+  const [x, y] = toScr(...cellCenter(i, j)), l = 26, t = 128, r = W - 74, b = H - 34;
+  if (x >= l - 10 && x <= W - 20 && y >= t - 60 && y <= b) return;
+  const cx = (l + r) / 2, cy = (t + b) / 2, dx = x - cx, dy = y - cy, k = Math.min((r - l) / 2 / Math.abs(dx || 1e-6), (b - t) / 2 / Math.abs(dy || 1e-6));
+  const ex = cx + dx * k, ey = cy + dy * k, a = Math.atan2(dy, dx);
+  ctx.save(); ctx.translate(ex, ey); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(13, -6); ctx.lineTo(13, 6); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.restore();
+  badge(ex, ey, 13, ic, col);
+  const d = cheb(i, j, S.p.i, S.p.j); ctx.font = "700 10px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(10,12,11,.8)"; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ex - 13, ey + 14, 26, 13, 6); else ctx.rect(ex - 13, ey + 14, 26, 13); ctx.fill(); ctx.fillStyle = "#e4ebe2"; ctx.fillText(d, ex, ey + 21);
+}
 function badge(x, y, r, ic, ring, glow) {   // круглый жетон: тёмная подложка, цветное кольцо, значок
   ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, 7); const g = ctx.createRadialGradient(x, y - r * .4, r * .2, x, y, r);
   g.addColorStop(0, "#2a322e"); g.addColorStop(1, "#111513"); ctx.fillStyle = g;
@@ -632,7 +650,7 @@ function centerOnPlayer() { const [x, y] = cellCenter(S.p.i, S.p.j); cam.x = x; 
 
 /* Тайлы OpenStreetMap, затемнённые фильтром под стиль игры (без сети — фолбэк на векторы).
    Политика OSM: только лёгкое использование; для релиза — свой PMTiles/тайл-сервер. */
-const TILE_FILTER = "invert(1) hue-rotate(180deg) brightness(.88) contrast(.95) saturate(.55)";
+const TILE_FILTER = "invert(1) hue-rotate(180deg) brightness(.95) contrast(1.02) saturate(.8)";
 const tiles = new Map(); let tileOk = 0, tileFail = 0;
 const tilesUsable = () => tileOk > 0 || tileFail < 6;
 // Уже загруженный тайл-предок (для подмены, пока грузится нужный): без запуска загрузки
@@ -727,6 +745,8 @@ function draw() {
     const [sx, sy] = toScr(OX + i * CELL, OY + (j + 1) * CELL);
     const c = S.cells[key(i, j)];
     if (!c || !c.e) continue;
+    if (cs > 26 && !poiAt.has(key(i, j))) { const ic = CELL_ICON[cellBase(i, j).t];   // что на клетке: значок в углу
+      if (ic) { ctx.globalAlpha = c.ls && c.lc >= 3 && now - c.ls < RESPAWN ? .3 : .85; ctx.font = Math.min(15, cs * .22) + "px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#cfd6cc"; ctx.fillText(ic, sx + cs * .17, sy + cs * .17); ctx.globalAlpha = 1; } }
     const zf = zoneOf[idx] >= 0 && !(c.o) ? POIS[zoneOf[idx]].f : null;
     if (c.o) { ctx.fillStyle = c.f ? "rgba(98,199,116,0.30)" : "rgba(98,199,116,0.20)"; ctx.fillRect(sx, sy, cs + .5, cs + .5); terr.push([i, j, sx, sy]); }
     else if (zf) { ctx.fillStyle = zf === "ai" ? "rgba(79,179,232,0.11)" : "rgba(232,87,74,0.11)"; ctx.fillRect(sx, sy, cs + .5, cs + .5); zoneE.push([i, j, sx, sy, zf, zoneOf[idx]]); }
@@ -887,6 +907,11 @@ function draw() {
     ctx.lineWidth = 2.5; ctx.strokeStyle = "#0b0d0c"; ctx.stroke(); }
   { const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .45, W / 2, H / 2, Math.max(W, H) * .78);
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.45)"); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); }
+  { const [hi, hj] = hub(); edgeMark(hi, hj, S.base ? "🏠" : "🏫", "#62c774");
+    (S.lost || []).forEach(l => edgeMark(l.i, l.j, "🙋", "#e3ad3c")); (S.caches || []).forEach(c => edgeMark(c.i, c.j, "🧰", "#e3ad3c"));
+    if (E && E.t === "drop") edgeMark(E.i, E.j, "📦", "#e3ad3c"); if (S.hunt && S.hunt.found) edgeMark(S.hunt.i, S.hunt.j, "✨", "#be78ff");
+    const tg = storyTarget(); if (tg) edgeMark(tg.i, tg.j, "⭐", "#f3c766");
+    if (route) { const q = route.path[route.path.length - 1]; edgeMark(q[0], q[1], "📍", "#f3c766"); } }
   // ночь (по реальному времени Алматы)
   const hr = new Date().getHours();
   if (hr >= 21 || hr < 6) { ctx.fillStyle = "rgba(5,8,20,0.28)"; ctx.fillRect(0, 0, W, H); }
@@ -2462,7 +2487,13 @@ document.getElementById("bLayer").onclick = () => { S.showDist = !S.showDist; to
 
 /* ================== UI ================== */
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => setTab(b.dataset.t));
-function setTab(t) { tab = t; document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t)); renderPane(); }
+let sheetState = 1;   // 0 — свёрнута (только вкладки), 1 — обычная, 2 — высокая
+function setSheet(n) { sheetState = Math.max(0, Math.min(2, n)); const sh = document.getElementById("sheet"); sh.classList.toggle("min", sheetState === 0); sh.classList.toggle("big", sheetState === 2); resize(); setTimeout(resize, 260); }
+{ const g = document.getElementById("grip"); let y0 = null, moved = false;
+  g.addEventListener("pointerdown", e => { y0 = e.clientY; moved = false; g.setPointerCapture(e.pointerId); });
+  g.addEventListener("pointermove", e => { if (y0 === null) return; const dy = e.clientY - y0; if (Math.abs(dy) > 28) { setSheet(sheetState + (dy < 0 ? 1 : -1)); y0 = e.clientY; moved = true; } });
+  g.addEventListener("pointerup", () => { if (y0 !== null && !moved) setSheet(sheetState === 1 ? 0 : 1); y0 = null; }); }
+function setTab(t) { if (sheetState === 0) setSheet(1); tab = t; document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t)); renderPane(); }
 function openModal(html) { document.getElementById("mbox").innerHTML = html; document.getElementById("modal").style.display = "flex"; }
 function closeModal() { document.getElementById("modal").style.display = "none"; }
 function renderHud() {
@@ -2470,9 +2501,10 @@ function renderHud() {
   set("Hp", p.hp); set("Food", p.food); set("Water", p.water); set("En", p.en);
   const c = S.cells[key(p.i, p.j)] || {};
   const z = zoneFaction(p.i, p.j);
-  document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span>${streetOf(p.i, p.j) ? " · " + streetOf(p.i, p.j) : ""} · ${DISTRICTS[distOf[p.j * GW + p.i]].n}` + (microOf[p.j * GW + p.i] >= 0 ? ` · мкр ${MICRO[microOf[p.j * GW + p.i]].n}` : "") + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
+  document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span>${streetOf(p.i, p.j) ? `<span class="muted"> · ${streetOf(p.i, p.j)}</span>` : ""}` + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
     (c.o ? ` · <span style="color:var(--good)">ваша${c.f ? " 🛡" : ""}</span>` : z ? ` · <span style="color:${z === "ai" ? "var(--ai)" : "var(--gang)"}">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : "") +
-    (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡 GPS" : "") + " · " + S.money + " 💰";
+    (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡" : "");
+  document.getElementById("wallet").innerHTML = `⭐ <b>${S.lvl}</b> <span class="muted">${Math.floor(S.xp / xpNext() * 100)}%</span> · 💰 <b>${S.money}</b>`;
   renderScanBar(); document.getElementById("bLayer").classList.toggle("on", !!S.showDist);
   const eb = document.getElementById("eventBar"); const E = S.event;
   if (E && E.t !== "quake") { eb.style.display = "block"; eb.innerHTML = EV[E.t] + (E.i !== undefined ? " · " + cheb(E.i, E.j, p.i, p.j) + " кл. от вас" : "") + " · " + Math.ceil((E.until - Date.now()) / 60e3) + " мин"; }
@@ -2491,16 +2523,17 @@ function renderPane() {
     const isBase = S.base === key(p.i, p.j); const inc = isBase ? pendingIncome() : 0;
     const mins = c.ls ? Math.max(0, Math.ceil((RESPAWN - (Date.now() - c.ls)) / 60e3)) : 0;
     el.innerHTML = `
+     ${near.length ? `<div class="dist" style="border-color:rgba(232,87,74,.6);color:#ff8a7e;font-weight:600">⚠ Рядом: ${near.map(e => ENEMY[e.type].i + " " + (e.name || ENEMY[e.type].n) + " (" + cheb(e.i, e.j, p.i, p.j) + " кл.)").join(", ")}</div>` : ""}
      ${guideHtml()}
      ${here.poi ? placeHtml(here.poi, c.o) : ""}
      ${route ? `<button class="btn" style="width:100%;margin-bottom:8px" onclick="stopRoute('Маршрут остановлен')">⏹ Остановить маршрут<small>${route.rest ? "привал: коплю силы · " : ""}осталось ${route.path.length - route.k} кл.</small></button>` : travel ? `<p class="muted">В пути…</p>` : ""}
      <div class="grid2">
       <button class="btn acc" ${lock || left <= 0 ? "disabled" : ""} onclick="actSearch()">🔍 Обыскать<small>${left > 0 ? "8 с · −8⚡ · осталось " + left : "пусто · ещё " + mins + " мин"}</small></button>
       <button class="btn" ${lock ? "disabled" : ""} onclick="actScout()">👁 Разведка<small>5 с · −6⚡ · радиус ${SCAN_R}</small></button>
-      <button class="btn" ${lock || !capOk ? "disabled" : ""} onclick="actCapture()">🚩 Захватить<small>${capOk ? "15 с · −15⚡" : capWhy}</small></button>
+      ${c.o ? "" : `<button class="btn" ${lock || !capOk ? "disabled" : ""} onclick="actCapture()">🚩 Захватить<small>${capOk ? "15 с · −15⚡" : capWhy}</small></button>`}
       ${c.o ? `<button class="btn" ${lock || (S.inv.parts || 0) < 5 || c.f ? "disabled" : ""} onclick="actFortify()">🛡 Укрепить<small>${c.f ? "уже укреплено" : "5 деталей · 12 с"}</small></button>`
             : trap ? `<button class="btn bad" ${lock ? "disabled" : ""} onclick="actDisarm()">⚠ Обезвредить<small>7 с · 80% успех</small></button>`
-            : `<button class="btn" disabled>🛡 Укрепить<small>только своя клетка</small></button>`}
+            : ""}
       ${c.o ? (c.b ? (() => { const B = BUILD[c.b.t], k = key(p.i, p.j), r = bReady(k), bl = Date.now() < c.b.ready;
           return `<button class="btn ${r ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="openBuild()">${B.i} ${B.n}${bLv(c) ? " · ур. " + bLv(c) : ""}<small>${bl ? "🏗 стройка: " + Math.ceil((c.b.ready - Date.now()) / 60e3) + " мин" : B.out ? (r ? "готово: " + ITEMS[B.out].n + " ×" + r : "копит продукцию") : "работает"}</small></button>`; })()
         : `<button class="btn" ${lock ? "disabled" : ""} onclick="openBuild()">🏗 Построить<small>огород, генератор, вышка…</small></button>`) : ""}
@@ -2518,16 +2551,18 @@ function renderPane() {
       ${here.t === "highrise" ? `<button class="btn" ${lock ? "disabled" : ""} onclick="actRoof()">🔭 На крышу<small>10 с · −10⚡ · обзор 8 кл.</small></button>` : ""}
       ${isLake(here.poi) ? `<button class="btn" ${lock || (c.wl && Date.now() - c.wl < 5 * 60e3) ? "disabled" : ""} onclick="actLake()">💧 Набрать воды<small>+2 воды · риск грязной</small></button>` : ""}
       ${c.o ? `<button class="btn" ${lock ? "disabled" : ""} onclick="openGuard()">🛡 Охрана<small>${gCount(c.g) ? "сила " + gStr(c.g) + " · " + unitsTxt(c.g) : "свободных: " + (S.crew || []).filter(m => m.st === "idle").length}</small></button>` : ""}
+      ${(() => { const g = gatherHere(); if (!g) return ""; const cd = c.gt ? Math.max(0, Math.ceil((GATHER_CD - (Date.now() - c.gt)) / 60e3)) : 0, ok = g.q >= GATHER_MIN && !cd;
+        return `<button class="btn ${ok ? "acc" : ""}" ${lock || !ok ? "disabled" : ""} onclick="actGather()">⛏ Собрать: ${DEPO[g.d].i} ${pct(g.q)}<small>${g.q < GATHER_MIN ? "бедная клетка — ищите сканером 🔎" : cd ? "восстановится через " + cd + " мин" : "10 с · −8⚡ · " + ITEMS[g.it].n + " ×" + g.n}</small></button>`; })()}
+     </div>
+     <div class="chips">
       ${S.hunt && S.hunt.found && S.hunt.i === p.i && S.hunt.j === p.j ? `<button class="btn acc" ${lock ? "disabled" : ""} onclick="huntOpen()">✨ Вскрыть ядро<small>20 с · 55%${S.inv.emp ? " + ЭМИ 35%" : ""} · ещё ${Math.ceil((S.hunt.found + 15 * 60e3 - Date.now()) / 60e3)} мин</small></button>`
         : `<button class="btn" ${lock ? "disabled" : ""} onclick="huntPing()">🧿 Пеленг ядра<small>${S.hunt ? "пеленгов: " + S.hunt.pings.length + " · последний: " + (S.hunt.pings.length ? BANDS[S.hunt.pings[S.hunt.pings.length - 1].b][2] : "—") : Date.now() < (S.huntNext || 0) ? "перезарядка " + Math.ceil((S.huntNext - Date.now()) / 60e3) + " мин" : "искать сигнал ИИ"}</small></button>`}
       <button class="btn ${craftHub() ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="openBench()">🔧 Крафт<small>${craftHub() ? "есть доступ к складу" : "из рюкзака"}</small></button>
-      ${(() => { const g = gatherHere(); if (!g) return ""; const cd = c.gt ? Math.max(0, Math.ceil((GATHER_CD - (Date.now() - c.gt)) / 60e3)) : 0, ok = g.q >= GATHER_MIN && !cd;
-        return `<button class="btn ${ok ? "acc" : ""}" ${lock || !ok ? "disabled" : ""} onclick="actGather()">⛏ Собрать: ${DEPO[g.d].i} ${pct(g.q)}<small>${g.q < GATHER_MIN ? "бедная клетка — ищите сканером 🔎" : cd ? "восстановится через " + cd + " мин" : "10 с · −8⚡ · " + ITEMS[g.it].n + " ×" + g.n}</small></button>`; })()}
       <button class="btn ${atCamp() ? "acc" : ""}" ${lock ? "disabled" : ""} onclick="openMarket()">🛒 Барахолка<small>${atCamp() ? "лагерь: без наценки" : "курьер: наценка " + Math.round((1 - fee()) * 100) + "%"}${S.deficit && Date.now() < S.deficit.until ? " · 🔥 " + ITEMS[S.deficit.k].n : ""}</small></button>
       <button class="btn" ${lock ? "disabled" : ""} onclick="openRadio()">📻 Рация<small>${S.quests.length}/3 заданий${Date.now() < S.qNext ? " · " + Math.ceil((S.qNext - Date.now()) / 60e3) + " мин" : ""}</small></button>
      </div>
-     <p class="muted" style="margin:10px 0 4px">${S.gps ? "GPS: перемещайтесь по городу физически." : `Тап по клетке в рамке — переход (до ${moveR()} кл. = ${moveR() * CELL_REAL} м, ${carOn() ? "0.5 бензина" : S.vehicle === "bike" ? "−2⚡" : "−" + EN_PER_CELL + "⚡"} за клетку).`}</p>
-     ${near.length ? `<p style="color:var(--bad);margin:4px 0">Рядом: ${near.map(e => ENEMY[e.type].i + " " + (e.name || ENEMY[e.type].n)).join(", ")}</p>` : ""}`;
+
+`;
   } else if (tab === "inv") {
     const rows = Object.entries(S.inv).map(([k, n]) => {
       const it = ITEMS[k];
