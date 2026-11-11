@@ -495,7 +495,7 @@ function newState() {
     inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
     cells: {}, log: [], kills: 0, deaths: 0, gps: false,
     xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
-    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0,
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, stat: {}, guide: 0,
   };
 }
 function migrateCells(l) {  // старая клетка 250 м (i,j) = четыре новых 125 м: (2i..2i+1, 2j..2j+1)
@@ -587,10 +587,13 @@ function getTile(z, x, y) {
   const k = z + "/" + x + "/" + y; let t = tiles.get(k);
   if (t) { tiles.delete(k); tiles.set(k, t); return t; }  // LRU: свежие в конец
   const img = new Image(); t = {img, ok: false}; tiles.set(k, t);
-  img.onload = () => { t.ok = true; tileOk++; dirty = true; };
+  img.onload = () => {
+    try { const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d");
+      if ("filter" in x) { x.filter = TILE_FILTER; x.drawImage(img, 0, 0, 256, 256); t.img = c; } } catch (e) {}
+    t.ok = true; tileOk++; dirty = true; };
   img.onerror = () => { tileFail++; dirty = true; };
   img.src = "https://tile.openstreetmap.org/" + k + ".png";
-  if (tiles.size > 600) { const first = tiles.keys().next().value; tiles.delete(first); }
+  if (tiles.size > 240) { const first = tiles.keys().next().value; tiles.delete(first); }
   return t;
 }
 function drawTiles() {
@@ -601,7 +604,7 @@ function drawTiles() {
   const tx0 = Math.floor((x0 + WORLD / 2) / WORLD * n), tx1 = Math.floor((x1 + WORLD / 2) / WORLD * n);
   const ty0 = Math.floor((WORLD / 2 - y0) / WORLD * n), ty1 = Math.floor((WORLD / 2 - y1) / WORLD * n);
   if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 80) return;
-  ctx.save(); const hasFilter = "filter" in ctx; if (hasFilter) ctx.filter = TILE_FILTER;
+  ctx.save(); const hasFilter = "filter" in ctx;
   for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
     const t = getTile(z, tx, ty);
     const mx = tx / n * WORLD - WORLD / 2, my = WORLD / 2 - ty / n * WORLD;
@@ -806,6 +809,10 @@ function draw() {
   });
   if (devTool && devTool.sel != null && POIS[devTool.sel]) { const q = POIS[devTool.sel], [qx, qy] = toScr(...cellCenter(q.i, q.j));
     ctx.strokeStyle = "#4fb3e8"; ctx.lineWidth = 3; ctx.setLineDash([4, 3]); ctx.strokeRect(qx - cs / 2, qy - cs / 2, cs, cs); ctx.setLineDash([]); }
+  if (route) { const [ax, ay] = toScr(...cellCenter(S.p.i, S.p.j)); ctx.beginPath(); ctx.moveTo(ax, ay);
+    for (let q = route.k; q < route.path.length; q++) { const [rx, ry] = toScr(...cellCenter(route.path[q][0], route.path[q][1])); ctx.lineTo(rx, ry); }
+    ctx.strokeStyle = "rgba(243,199,102,.9)"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.setLineDash([2, 8]); ctx.lineCap = "round"; ctx.lineDashOffset = -(now / 60) % 10; ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0; ctx.lineCap = "butt";
+    const [ti, tj] = route.path[route.path.length - 1], [tx, ty] = toScr(...cellCenter(ti, tj)); badge(tx, ty, Math.max(10, Math.min(16, cs * .3)), "📍", "#f3c766", 10); }
   // реальная позиция GPS и точность
   if (S.gps && gpsFix && Date.now() - gpsFix.t < 60e3) { const [gx, gy] = toScr(gpsFix.x, gpsFix.y), ar = gpsFix.acc / Math.cos(LAT0 * Math.PI / 180) * cam.s;
     ctx.beginPath(); ctx.arc(gx, gy, Math.max(4, ar), 0, 7); ctx.fillStyle = "rgba(79,179,232,.12)"; ctx.fill(); ctx.strokeStyle = "rgba(79,179,232,.6)"; ctx.lineWidth = 1; ctx.stroke();
@@ -886,33 +893,69 @@ function reveal(i, j, r, scout) {
   }
   dirty = true;
 }
+let route = null, pendingPath = null;   // маршрут: {path: [[i,j],…], k — сколько клеток пройдено}
+function findPath(i0, j0, i1, j1) {      // поиск в ширину по клеткам города (8 направлений), вода и края непроходимы
+  if (!inCity[j1 * GW + i1]) return null;
+  const prev = new Int32Array(N).fill(-1), q = new Int32Array(N); let h = 0, t = 0; const s0 = j0 * GW + i0, s1 = j1 * GW + i1;
+  prev[s0] = s0; q[t++] = s0;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  while (h < t) { const c = q[h++]; if (c === s1) break; const ci = c % GW, cj = (c - ci) / GW;
+    for (const [di, dj] of dirs) { const a = ci + di, b = cj + dj; if (a < 0 || b < 0 || a >= GW || b >= GH) continue; const n = b * GW + a;
+      if (prev[n] >= 0 || !inCity[n]) continue; prev[n] = c; q[t++] = n; } }
+  if (prev[s1] < 0) return null;
+  const path = []; for (let c = s1; c !== s0; c = prev[c]) path.push([c % GW, Math.floor(c / GW)]);
+  return path.reverse();
+}
+function legTo(i, j, d, quiet) {         // один переход на d клеток; "en" — не хватило энергии
+  let cost = d * EN_PER_CELL, speed = 1;
+  if (carOn()) { if (S.tank < d * .25) { toast("Мало бензина: нужно " + d * .25); return false; } S.tank -= d * .25; cost = 0; speed = 3; }
+  else if (S.vehicle === "bike") { cost = d; speed = 2; }
+  if (S.p.en < cost) { if (!quiet) toast("Не хватает энергии (" + cost + ")"); return "en"; }
+  S.p.en -= cost; resting = false;
+  travel = {fi: S.p.i, fj: S.p.j, ti: i, tj: j, t0: Date.now(), dur: d * SEC_PER_CELL * 1000 / speed};
+  S.p.i = i; S.p.j = j; // целевая клетка; анимация из travel
+  renderPane(); return true;
+}
+function routeNext() {
+  if (!route || busy || fight || travel || document.getElementById("modal").style.display === "flex") return;
+  const rest = route.path.length - route.k;
+  if (rest <= 0) { route = null; toast("📍 Вы на месте"); renderAll(); return; }
+  const n = Math.min(moveR(), rest), [i, j] = route.path[route.k + n - 1], r = legTo(i, j, n, true);
+  if (r === true) { route.k += n; route.rest = false; }
+  else if (r === "en") { if (!route.rest) { route.rest = true; toast("😮‍💨 Привал: коплю силы, пойду дальше сам"); renderPane(); } }
+  else { route = null; renderAll(); }
+}
+function startRoute() { if (!pendingPath) return; route = {path: pendingPath, k: 0}; pendingPath = null; closeModal(); routeNext(); renderAll(); }
+function stopRoute(why) { if (route) { route = null; if (why) toast(why); renderAll(); } }
 function onTap(sx, sy) {
   const [mx, my] = toMerc(sx, sy); const [i, j] = cellOf(mx, my);
   if (!inGrid(i, j)) return;
   if (!inCity[j * GW + i]) { if (luOf(i, j) === "W") toast("Там вода"); return; }
   if (devTool && devOn()) { devTap(i, j); return; }
   if (pickMode) { pickTarget(i, j); return; }
-  if (i === S.p.i && j === S.p.j) { setTab("act"); return; }
+  if (i === S.p.i && j === S.p.j) { if (route) stopRoute("Маршрут остановлен"); setTab("act"); return; }
   const c = S.cells[key(i, j)];
   if (S.gps) { toast(c && c.e ? describe(i, j) : "Неизвестная территория"); return; }
-  if (busy || travel || fight) { toast("Сейчас занят"); return; }
+  if (fight || busy) { toast("Сейчас занят"); return; }
   const d = cheb(i, j, S.p.i, S.p.j);
-  if (d > moveR()) { toast(c && c.e ? describe(i, j) + " · далеко" : "Слишком далеко: радиус " + moveR() + " кл. (" + moveR() * CELL_REAL + " м)"); return; }
-  let cost = d * EN_PER_CELL, speed = 1;
-  if (carOn()) { if (S.tank < d * .25) { toast("Мало бензина: нужно " + d * .25); return; } S.tank -= d * .25; cost = 0; speed = 3; }
-  else if (S.vehicle === "bike") { cost = d; speed = 2; }
-  if (S.p.en < cost) { toast("Не хватает энергии (" + cost + ")"); return; }
-  S.p.en -= cost; resting = false;
-  travel = {fi: S.p.i, fj: S.p.j, ti: i, tj: j, t0: Date.now(), dur: d * SEC_PER_CELL * 1000 / speed};
-  S.p.i = i; S.p.j = j; // целевая клетка; анимация из travel
-  renderPane();
+  if (d <= moveR() && !travel && !route) { legTo(i, j, d); return; }
+  const path = findPath(S.p.i, S.p.j, i, j); if (!path) { toast("Туда нет дороги"); return; }
+  const speed = carOn() ? 3 : S.vehicle === "bike" ? 2 : 1, sec = Math.round(path.length * SEC_PER_CELL / speed);
+  const cost = carOn() ? (path.length * .25) + " бензина" : (S.vehicle === "bike" ? path.length : path.length * EN_PER_CELL) + "⚡";
+  const z = zoneFaction(i, j); pendingPath = path;
+  openModal(`<h3>🧭 ${c && c.e ? cellBase(i, j).n : "Неизвестная территория"}</h3>
+    <p class="muted">${c && c.e ? describe(i, j) : DISTRICTS[distOf[j * GW + i]].n + " район · не разведано"}</p>
+    <p>Путь: <b>${path.length} кл.</b> (${(path.length * CELL_REAL / 1000).toFixed(1)} км) · около <b>${sec >= 90 ? Math.round(sec / 60) + " мин" : sec + " с"}</b> · ${cost}${z ? ` · <span style="color:var(--bad)">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : ""}</p>
+    <p class="muted">Персонаж пойдёт сам. Если кончатся силы — сделает привал и продолжит. Если заметит враг или начнётся бой — остановится.</p>
+    <div class="acts"><button class="btn acc" onclick="startRoute()">Идти сюда</button><button class="btn" onclick="pendingPath=null;closeModal()">Отмена</button></div>`);
 }
 function arrive() {
-  travel = null; enterCell(S.p.i, S.p.j);
+  travel = null; enterCell(S.p.i, S.p.j); if (route) centerOnPlayer(); routeNext();
 }
 function enterCell(i, j) {
   const k = key(i, j); const c = C(k);
   const first = !c.e;
+  if (!c.v) { c.v = 1; S.stat.cells = (S.stat.cells || 0) + 1; gainXp(1); }   // опыт за новые места
   reveal(i, j, 1, false);
   const b = cellBase(i, j);
   if (first && b.poi) log("Найдено: " + b.poi.n, "a");
@@ -943,13 +986,14 @@ function describe(i, j) {
   const st = streetOf(i, j);
   return b.n + (st ? " · " + st : "") + " · " + DISTRICTS[d].n + (c.o ? " · ваша" : z ? (z === "ai" ? " · зона ИИ" : " · зона банды") : "");
 }
+const buzz = p => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
 function hurt(d) {
   d = d * (1 - .1 * pk("tough")); if (S.vest) d = d * (1 - ITEMS.vest.armor); d = Math.max(1, Math.round(d));
-  S.p.hp = Math.max(0, S.p.hp - d); resting = false;
+  S.p.hp = Math.max(0, S.p.hp - d); resting = false; buzz(40);
   if (S.p.hp <= 0) die(); return d;
 }
 function die() {
-  S.deaths++; fight = null; closeModal(); busy = null; travel = null; hideProgress();
+  S.deaths++; fight = null; closeModal(); busy = null; travel = null; route = null; hideProgress();
   log("Вы погибли. Рюкзак потерян.", "b");
   const own = Object.keys(S.cells).filter(k => S.cells[k].o);
   const home = S.base && (S.cells[S.base] || {}).o ? S.base.split(",").map(Number) : own.length ? own[0].split(",").map(Number) : [START.i, START.j];
@@ -1011,14 +1055,14 @@ function actSearch() {
   if (lootLeft(c) <= 0) return;
   startBusy("Обыск…", 8, 8, () => {
     const b = cellBase(S.p.i, S.p.j); const table = LOOT[b.t] || LOOT.res;
-    c.lc = (c.lc || 0) + 1; c.ls = Date.now();
+    c.lc = (c.lc || 0) + 1; c.ls = Date.now(); bump("search");
     const found = [];
     const rolls = (Math.random() < .25 ? 0 : rnd(1, b.poi ? 3 : 2)) + (Math.random() < .2 * pk("loot") ? 1 : 0);
     for (let r = 0; r < rolls; r++) {
       const tot = table.reduce((a, x) => a + x[1], 0); let v = Math.random() * tot;
       for (const [it, w, mn, mx] of table) { v -= w; if (v <= 0) { const got = addItem(it, rnd(mn, mx)); if (got) found.push(ITEMS[it].n + (got > 1 ? " ×" + got : "")); else found.push("(нет места: " + ITEMS[it].n + ")"); break; } }
     }
-    log(found.length ? "Найдено: " + found.join(", ") : "Ничего полезного", found.length ? "g" : "");
+    log(found.length ? "Найдено: " + found.join(", ") : "Ничего полезного", found.length ? "g" : ""); toast(found.length ? "🔍 " + found.join(", ") : "🔍 Ничего полезного");
     if (Math.random() < (zoneFaction(S.p.i, S.p.j) ? .12 : .03) * (1 - .3 * pk("stealth"))) spawnNear("ambush");
     else if (Math.random() < .03) offerSurvivor(newSurvivor(), "Под завалом кто-то живой! Вы помогаете выбраться.", null);
     gainXp(2);
@@ -1054,7 +1098,7 @@ function poiAlive(z) { const st = S.cells[key(POIS[z].i, POIS[z].j)] || {}; retu
 function actCapture() {
   const [ok, why] = canCapture(); if (!ok) { toast(why); return; }
   startBusy("Захват территории…", 15, 15, () => {
-    const c = C(key(S.p.i, S.p.j)); c.o = 1; c.oc = c.oy = Date.now(); gainXp(8);
+    const c = C(key(S.p.i, S.p.j)); c.o = 1; c.oc = c.oy = Date.now(); gainXp(8); bump("capture");
     const d = distOf[S.p.j * GW + S.p.i]; log("Территория захвачена · " + DISTRICTS[d].n, "g"); questProgress("capture", d); storyCheck("capture");
     const pct = distPct(d); if (pct >= 60 && !(S.dist || {})[d]) { (S.dist = S.dist || {})[d] = 1; log("★ " + DISTRICTS[d].n + " район под вашим контролем! Доход района ×1.5", "g"); gainXp(100); toast("★ Район захвачен: " + DISTRICTS[d].n); }
   });
@@ -1113,7 +1157,7 @@ const scanR = () => SCAN_DEPO_R + 2 * specBest("scanlab") + 2 * coreLv("sight"),
 function doScan(d) {
   if (!have("batt")) return; closeModal();
   startBusy("Сканирование: " + DEPO[d].n + "…", 4, 4, () => {
-    pay({batt: 1}); const R = scanR(); S.scan = {d, i: S.p.i, j: S.p.j, r: R, until: Date.now() + scanMin() * 60e3};
+    pay({batt: 1}); bump("scans"); const R = scanR(); S.scan = {d, i: S.p.i, j: S.p.j, r: R, until: Date.now() + scanMin() * 60e3};
     let best = null; for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) { const a = S.p.i + di, b = S.p.j + dj;
       if (!inGrid(a, b) || !inCity[b * GW + a]) continue; const q = depoQ(a, b, d); if (!best || q > best.q) best = {q, a, b}; }
     log(`📡 Скан «${DEPO[d].n}»: лучшая точка ${pct(best.q)} в ${cheb(best.a, best.b, S.p.i, S.p.j)} кл.`, "a"); gainXp(2);
@@ -1306,7 +1350,7 @@ function startBuild(t) {
   startBusy("Закладываем фундамент…", 6, 8, () => {
     if (!canPay(cost) || c.b || (t === "hq" && hqCell())) return; pay(cost);
     const now = Date.now(), dur = bMinMs(1); c.b = {t, lv: 1, ready: now + dur, y: now + dur, dur};
-    log(`🏗 Стройка начата: ${BUILD[t].n} (${B_MIN[1]} мин)`, "a"); gainXp(t === "hq" ? 20 : 5);
+    bump("built"); log(`🏗 Стройка начата: ${BUILD[t].n} (${B_MIN[1]} мин)`, "a"); gainXp(t === "hq" ? 20 : 5);
   });
 }
 function upgradeBuilding() {
@@ -1595,7 +1639,7 @@ function launchMission(i, j) {
   const pm = pickMode; if (!pm) return; const r = missionCalc(pm.type, pm.ids, i, j); pickMode = null; closeModal();
   if (r.team.some(m => m.st !== "idle")) { toast("Кто-то уже занят"); return; }
   const now = Date.now(); r.team.forEach(m => { m.st = "mission"; });
-  (S.missions = S.missions || []).push({type: pm.type, i, j, ids: pm.ids, t0: now, end: now + r.dur * 60e3, risk: r.risk, rolls: r.rolls, radius: r.radius});
+  bump("missions"); (S.missions = S.missions || []).push({type: pm.type, i, j, ids: pm.ids, t0: now, end: now + r.dur * 60e3, risk: r.risk, rolls: r.rolls, radius: r.radius});
   log(`🚩 ${MISSION[pm.type].n}: ${r.team.map(m => m.n).join(", ")} → ${cellBase(i, j).n} (${r.dur} мин)`, "a"); renderAll(); save();
 }
 function resolveMission(ms) {
@@ -1818,7 +1862,7 @@ function craft(id, n = 1) {
     if (left) { S.stash[k] -= left; if (S.stash[k] <= 0) delete S.stash[k]; } }
   const out = Math.floor(r.out[1] * (1 + .25 * coreLv("synth"))) * n, g = addItem(r.out[0], out);
   if (g < out) S.stash[r.out[0]] = (S.stash[r.out[0]] || 0) + out - g;
-  log(`🔧 Собрано: ${ITEMS[r.out[0]].n} ×${out}${g < out ? " (" + (out - g) + " на склад — рюкзак полон)" : ""}`, "g"); gainXp(Math.min(10, 2 * n)); save(); openBench();
+  bump("crafted"); log(`🔧 Собрано: ${ITEMS[r.out[0]].n} ×${out}${g < out ? " (" + (out - g) + " на склад — рюкзак полон)" : ""}`, "g"); gainXp(Math.min(10, 2 * n)); save(); openBench();
 }
 function openPerks() {
   const avail = Object.keys(PERKS).filter(k => pk(k) < PERKS[k].max);
@@ -2102,7 +2146,7 @@ function stepEnts() {
     let ti = e.i, tj = e.j;
     const hunt = !travel && !safeCell(S.p.i, S.p.j) && (dist <= 1 || e.aggro);
     if (hunt && !e.seen) {   // сначала замечает: пауза 4 с, игрок видит угрозу и может уйти
-      e.seen = now; e.next = now + 4000; e.aggro = true; moved = true;
+      e.seen = now; e.next = now + 4000; e.aggro = true; moved = true; route = null; buzz(80);
       toast("⚠ " + (e.name || T.n) + " заметил вас: уходите или готовьтесь к бою"); continue;
     }
     if (hunt) { ti += Math.sign(S.p.i - e.i); tj += Math.sign(S.p.j - e.j); e.aggro = dist <= 3; if (!e.aggro) e.seen = 0; }
@@ -2127,7 +2171,7 @@ function checkEncounter() {
 
 /* ----- бой ----- */
 function startFight(e) {
-  busy = null; hideProgress(); resting = false;
+  busy = null; hideProgress(); resting = false; route = null; buzz([60, 40, 60]);
   fight = {e, log: []};
   renderFight();
 }
@@ -2290,7 +2334,8 @@ function renderPane() {
     const isBase = S.base === key(p.i, p.j); const inc = isBase ? pendingIncome() : 0;
     const mins = c.ls ? Math.max(0, Math.ceil((RESPAWN - (Date.now() - c.ls)) / 60e3)) : 0;
     el.innerHTML = `
-     ${travel ? `<p class="muted">В пути…</p>` : ""}
+     ${guideHtml()}
+     ${route ? `<button class="btn" style="width:100%;margin-bottom:8px" onclick="stopRoute('Маршрут остановлен')">⏹ Остановить маршрут<small>${route.rest ? "привал: коплю силы · " : ""}осталось ${route.path.length - route.k} кл.</small></button>` : travel ? `<p class="muted">В пути…</p>` : ""}
      <div class="grid2">
       <button class="btn acc" ${lock || left <= 0 ? "disabled" : ""} onclick="actSearch()">🔍 Обыскать<small>${left > 0 ? "8 с · −8⚡ · осталось " + left : "пусто · ещё " + mins + " мин"}</small></button>
       <button class="btn" ${lock ? "disabled" : ""} onclick="actScout()">👁 Разведка<small>5 с · −6⚡ · радиус ${SCAN_R}</small></button>
@@ -2354,6 +2399,37 @@ function renderPane() {
     el.innerHTML = `<div class="log">${S.log.map(([t, m, c]) => `<div><span class="tm">${t}</span><span class="${c}">${m}</span></div>`).join("") || '<p class="muted">Пусто</p>'}</div>`;
   }
 }
+/* ----- путь выжившего: цели-подсказки с наградами ----- */
+const st = k => (S.stat || {})[k] || 0, bump = k => { S.stat[k] = st(k) + 1; };
+const ownCount = () => Object.values(S.cells).filter(c => c.o).length;
+const GUIDE = [
+  {t:"Обыщите лагерь", h:"Кнопка «🔍 Обыскать» ниже. Находки попадают в рюкзак.", ok:() => st("search") >= 1, r:{parts:3}},
+  {t:"Выйдите в город", h:"Коснитесь любой клетки на карте. В рамке — переход сразу, дальше — персонаж пойдёт сам по маршруту.", ok:() => cellBase(S.p.i, S.p.j).t !== "camp", r:{water:1, rusk:1}},
+  {t:"Обыщите ещё 3 клетки", h:"Магазины дают еду, аптеки — бинты, гаражи и промзоны — детали. Следите за 👁: враги видны на карте.", ok:() => st("search") >= 4, r:{parts:4}},
+  {t:"Захватите клетку", h:"Встаньте на клетку вне лагеря и нажмите «🚩 Захватить». Лучше рядом с лагерем: там не бывает врагов.", ok:() => st("capture") >= 1 || ownCount() >= 1, r:{parts:6, water:2}},
+  {t:"Постройте огород или водосборник", h:"На своей клетке: «🏗 Построить». Продукцию забирайте на месте — ею кормится отряд.", ok:() => st("built") >= 1 || Object.values(S.cells).some(c => c.b), r:{can:2, parts:6}},
+  {t:"Отправьте Айдара на вылазку", h:"Вкладка «👥 Люди» → «🚩 Вылазка» → Добыча → коснитесь разведанной клетки. Хабар придёт на склад.", ok:() => st("missions") >= 1, r:{batt:2, can:1}},
+  {t:"Соберите что-нибудь в крафте", h:"Кнопка «🔧 Крафт»: патроны, аптечки, растяжки. В лагере и убежище доступен склад.", ok:() => st("crafted") >= 1, r:{money:20}},
+  {t:"Обустройте убежище", h:"На своей клетке: «🏠 Убежище» (10 деталей). Это склад, точка возрождения и +2 места для людей.", ok:() => !!S.base, r:{medkit:1, ammo:6}},
+  {t:"Найдите выжившего", h:"Отметки 🙋 на карте — дойдите до них. Ещё людей находят на разведке и при обыске.", ok:() => (S.crew || []).length >= 2, r:{can:3, water:3}},
+  {t:"Просканируйте залежи", h:"«📡 Сканер залежей» (1 батарейка) покажет, где постройки работают быстрее.", ok:() => st("scans") >= 1, r:{parts:5}},
+  {t:"Захватите 10 клеток", h:"Ставьте людей в «🛡 Охрану» и стройте вышки, чтобы банды не отбивали клетки.", ok:() => ownCount() >= 10, r:{money:50, emp:1}},
+  {t:"Освободите Тастак-2", h:"Сюжет Сауле во вкладке «🗺 Цели»: разведайте рынок, убейте Смотрящего, займите микрорайон.", ok:() => (S.story || {}).t2 >= 6, r:{money:100, vest:1}},
+];
+const rewardTxt = r => Object.entries(r).map(([k, n]) => (k === "money" ? "💰" : ITEMS[k].n) + " ×" + n).join(", ");
+function guideTick() {
+  const g = GUIDE[S.guide || 0]; if (!g || fight || !g.ok()) return;
+  for (const [k, n] of Object.entries(g.r)) { if (k === "money") S.money += n; else { const got = addItem(k, n); if (got < n) S.stash[k] = (S.stash[k] || 0) + n - got; } }
+  S.guide = (S.guide || 0) + 1; gainXp(10); buzz(30);
+  log(`✅ Цель выполнена: ${g.t}. Награда: ${rewardTxt(g.r)}`, "g"); toast(`✅ ${g.t} · +${rewardTxt(g.r)}`); renderAll(); save();
+}
+function guideHtml() {
+  const k = S.guide || 0, g = GUIDE[k]; if (!g) return "";
+  return `<div class="dist" style="border-color:rgba(227,173,60,.55);background:linear-gradient(180deg,rgba(227,173,60,.12),rgba(227,173,60,.03))">
+    <div class="h"><span>📌 ${g.t}</span><span class="muted">${k + 1}/${GUIDE.length}</span></div>
+    <div class="muted" style="margin-top:3px">${g.h}</div><div class="muted" style="margin-top:3px;color:var(--good)">Награда: ${rewardTxt(g.r)}</div>
+    <i><s style="width:${k / GUIDE.length * 100}%;background:linear-gradient(90deg,var(--acc),var(--acc2))"></s></i></div>`;
+}
 /* ----- экспорт / импорт сохранения (перенос между телефоном и ПК, резервная копия) ----- */
 function openSaveIO() {
   save();
@@ -2394,7 +2470,7 @@ function renderAll() { document.getElementById("tabDev").style.display = devOn()
 function intro() {
   log("Сбой. Городская ИИ-сеть «Тұмар» захватила энергосистему. ТЭЦ горят, связь мертва.", "a");
   openModal(`<h3>Алматы: Сбой</h3><p>Городская ИИ-сеть вышла из-под контроля. Дроны патрулируют улицы, на рынках правят банды, на дорогах ловушки.</p>
-  <p class="muted">• Тап по клетке в рамке — переход.<br>• Обыскивайте клетки, следите за едой и водой.<br>• Разведка показывает ловушки и врагов.<br>• Захватывайте клетки и районы, укрепляйте их баррикадами.<br>• 📡 — режим GPS: ходите по реальному городу.</p>
+  <p class="muted">• Коснитесь любой клетки: рядом — переход сразу, далеко — персонаж пойдёт сам.<br>• Вверху панели «Действия» всегда есть текущая цель 📌 с наградой.<br>• Обыскивайте, захватывайте клетки, стройте, собирайте людей.<br>• 📡 — режим GPS: ходите по настоящему городу.</p>
   <div class="acts"><button class="btn acc" onclick="closeModal()">Выжить</button></div>`);
 }
 
@@ -2411,7 +2487,8 @@ function frame() {
   if (now - lastTick >= 1000) {
     const dt = (now - lastTick) / 1000; lastTick = now;
     if (!fight) survive(dt, false);
-    populate(); stepEnts(); raids(); buildTick(now); mktTick(now); bldEventTick(now); cacheTick(now); huntTick(now); lostTick(now); crewTick(now); missionTick(now); dirty = true; traderTick(now); eventTick(now); renderHud();
+    if (route && !travel) routeNext();
+    populate(); stepEnts(); raids(); buildTick(now); mktTick(now); bldEventTick(now); cacheTick(now); huntTick(now); lostTick(now); crewTick(now); missionTick(now); guideTick(); dirty = true; traderTick(now); eventTick(now); renderHud();
     if (S.pendingPerks > 0 && !fight && document.getElementById("modal").style.display !== "flex") openPerks();
     if ((tab === "act" || tab === "crew") && !busy && document.getElementById("modal").style.display !== "flex") renderPane();
     if (now - lastSave > 10000) { lastSave = now; save(); }
