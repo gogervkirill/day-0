@@ -526,7 +526,7 @@ function newState() {
     inv: {water: 2, can: 1, band: 2, rebar: 1}, weapon: "rebar", vest: false,
     cells: {}, log: [], kills: 0, deaths: 0, gps: false,
     xp: 0, lvl: 1, perks: {}, pendingPerks: 0, base: null, stash: {},
-    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "scrap", showDist: false, disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, mods: {}, robbed: null, stat: {}, guide: 0,
+    money: 0, quests: [], qNext: 0, vehicle: null, tank: 0, event: null, nextEvent: Date.now() + 5 * 60e3, trader: null, nextTrader: Date.now() + 90e3, cs: CELL_REAL, mkt: {}, scan: null, scanOn: false, scanD: "all", showDist: false, disc: {}, dv: {}, deficit: null, reserve: {}, caches: [], hunt: null, huntNext: 0, cores: {}, crew: [], missions: [], lost: [], crewId: 1, ration: 0, mods: {}, robbed: null, stat: {}, guide: 0,
   };
 }
 function migrateCells(l) {  // старая клетка 250 м (i,j) = четыре новых 125 м: (2i..2i+1, 2j..2j+1)
@@ -1254,21 +1254,26 @@ function doScan(d) {
 }
 
 /* ----- живой сканер: тепловая карта выбранного ресурса вокруг игрока; импульс (батарейка) — шире и на 10 минут ----- */
+/* Режим «все» (S.scanD === "all"): на каждой клетке показывается её самый богатый ресурс своим цветом */
+const DEPO_RGB = {soil: [98, 199, 116], water: [79, 179, 232], scrap: [235, 150, 60], grid: [240, 220, 90], meds: [235, 110, 160], cache: [180, 130, 255]};
+const DEPO_SHORT = {soil: "Земля", water: "Вода", scrap: "Лом", grid: "Энергия", meds: "Медицина", cache: "Схроны"};
+const depoBest = (i, j) => Object.keys(DEPO).reduce((a, k) => depoQ(i, j, k) > depoQ(i, j, a) ? k : a);
+const scanQ = (i, j, d) => depoQ(i, j, d === "all" ? depoBest(i, j) : d);
 const liveR = () => 4 + coreLv("sight") + 2 * ctl("tower");
 function scanActive(now = Date.now()) {   // {d, i, j, r, boost}
   if (S.scan && now < S.scan.until) return {d: S.scan.d, i: S.scan.i, j: S.scan.j, r: S.scan.r, boost: S.scan.until};
-  return S.scanOn ? {d: S.scanD || "scrap", i: S.p.i, j: S.p.j, r: liveR()} : null;
+  return S.scanOn ? {d: S.scanD || "all", i: S.p.i, j: S.p.j, r: liveR()} : null;
 }
 function scanBest(sc) {
   let best = null; for (let dj = -sc.r; dj <= sc.r; dj++) for (let di = -sc.r; di <= sc.r; di++) { const a = sc.i + di, b = sc.j + dj;
-    if (!inGrid(a, b) || !inCity[b * GW + a] || safeCell(a, b)) continue; const q = depoQ(a, b, sc.d); if (!best || q > best.q) best = {q, a, b}; }
+    if (!inGrid(a, b) || !inCity[b * GW + a] || safeCell(a, b)) continue; const q = scanQ(a, b, sc.d); if (!best || q > best.q) best = {q, a, b}; }
   return best;
 }
-function scanToggle() { S.scanOn = !S.scanOn; if (S.scanOn) { S.scanD = S.scanD || "scrap"; bump("scans"); if (cam.s < .1) cam.s = .14; centerOnPlayer(); toast("🔎 Сканер включён: выберите ресурс вверху"); } else S.scan = null; renderAll(); save(); }
+function scanToggle() { S.scanOn = !S.scanOn; if (S.scanOn) { S.scanD = S.scanD || "all"; bump("scans"); if (cam.s < .1) cam.s = .14; centerOnPlayer(); toast("🔎 Сканер включён: вверху можно выбрать ресурс или «Все»"); } else S.scan = null; renderAll(); save(); }
 function scanPick(d) { S.scanD = d; if (S.scan) S.scan.d = d; renderAll(); save(); }
 function scanBoost() {
   if (!have("batt")) { toast("Для импульса нужна батарейка"); return; }
-  pay({batt: 1}); S.scan = {d: S.scanD || "scrap", i: S.p.i, j: S.p.j, r: scanR() + 4, until: Date.now() + 10 * 60e3};
+  pay({batt: 1}); S.scan = {d: S.scanD || "all", i: S.p.i, j: S.p.j, r: scanR() + 4, until: Date.now() + 10 * 60e3};
   if (cam.s > .09) cam.s = .07; centerOnPlayer(); log(`📡 Импульс сканера: радиус ${S.scan.r} кл. на 10 минут`, "a"); buzz(30); renderAll(); save();
 }
 function scanGo() {
@@ -1282,22 +1287,24 @@ let scanSig = "";
 function renderScanBar() {
   const el = document.getElementById("scanBar"), sc = scanActive(); document.getElementById("bScan").classList.toggle("on", !!S.scanOn);
   if (!sc) { if (scanSig) { el.style.display = "none"; scanSig = ""; } return; }
-  const b = scanBest(sc), here = depoQ(S.p.i, S.p.j, sc.d), left = sc.boost ? Math.ceil((sc.boost - Date.now()) / 60e3) : 0;
-  const sig = [sc.d, sc.r, left, Math.round(here * 100), b && b.a, b && b.b, have("batt") > 0].join("|"); if (sig === scanSig) return; scanSig = sig;
+  const b = scanBest(sc), here = scanQ(S.p.i, S.p.j, sc.d), all = sc.d === "all", hereK = depoBest(S.p.i, S.p.j), left = sc.boost ? Math.ceil((sc.boost - Date.now()) / 60e3) : 0;
+  const sig = [sc.d, sc.r, left, Math.round(here * 100), hereK, b && b.a, b && b.b, have("batt") > 0].join("|"); if (sig === scanSig) return; scanSig = sig;
   el.style.display = "block";
-  el.innerHTML = `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">${Object.entries(DEPO).map(([d, D]) => `<button onclick="scanPick('${d}')" style="border:1px solid ${d === sc.d ? "var(--acc)" : "transparent"};background:${d === sc.d ? "rgba(227,173,60,.18)" : "rgba(255,255,255,.06)"};color:var(--text);border-radius:999px;padding:4px 8px;font-size:14px">${D.i}${d === sc.d ? ` <b style="font-size:12px">${D.n}</b>` : ""}</button>`).join("")}
+  const chip = (d, ic, nm, col) => `<button onclick="scanPick('${d}')" style="border:1px solid ${d === sc.d ? "var(--acc)" : "rgba(255,255,255,.1)"};background:${d === sc.d ? "rgba(227,173,60,.2)" : "rgba(255,255,255,.05)"};color:${d === sc.d ? "var(--acc2)" : "var(--text)"};border-radius:999px;padding:4px 9px;font-size:12px;font-weight:${d === sc.d ? 700 : 500}">${col ? `<i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:rgb(${col});margin-right:4px"></i>` : ""}${ic} ${nm}</button>`;
+  el.innerHTML = `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">${chip("all", "🌈", "Все")}${Object.entries(DEPO).map(([d, D]) => chip(d, D.i, DEPO_SHORT[d], all ? DEPO_RGB[d] : null)).join("")}
       <button onclick="scanBoost()" style="border:1px solid var(--ai);background:rgba(79,179,232,.14);color:#bfe6fb;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:700;opacity:${have("batt") ? 1 : .45}">${left ? "📡 " + left + " мин" : "📡 Импульс"}</button></div>
-    <div onclick="scanGo()" style="margin-top:5px;font-size:12px">здесь <b style="color:${qColor(here)}">${pct(here)}</b> · лучшая точка <b style="color:${b ? qColor(b.q) : "inherit"}">${b ? pct(b.q) : "—"}</b>${b ? " в " + cheb(b.a, b.b, S.p.i, S.p.j) + " кл. · <u style='color:var(--acc2)'>идти ➜</u>" : ""} <span class="muted">· радиус ${sc.r}</span></div>`;
+    <div onclick="scanGo()" style="margin-top:6px;font-size:12px">здесь ${all ? DEPO[hereK].i + " " : ""}<b style="color:${qColor(here)}">${pct(here)}</b> · лучшая точка ${b && all ? DEPO[depoBest(b.a, b.b)].i + " " : ""}<b style="color:${b ? qColor(b.q) : "inherit"}">${b ? pct(b.q) : "—"}</b>${b ? " в " + cheb(b.a, b.b, S.p.i, S.p.j) + " кл. · <u style='color:var(--acc2)'>идти ➜</u>" : ""} <span class="muted">· радиус ${sc.r}</span></div>`;
 }
 const heatC = document.createElement("canvas"), heatX = heatC.getContext("2d");
 function drawHeat(sc, cs, now) {
   const n = 2 * sc.r + 1; if (heatC.width !== n) heatC.width = heatC.height = n;
   const img = heatX.createImageData(n, n), d = img.data, pulse = .88 + .12 * Math.sin(now / 450);
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { const a = sc.i - sc.r + x, b = sc.j + sc.r - y, o = (y * n + x) * 4;
-    if (!inGrid(a, b) || !inCity[b * GW + a]) continue; const q = depoQ(a, b, sc.d);
+    if (!inGrid(a, b) || !inCity[b * GW + a]) continue; const all = sc.d === "all", bk = all ? depoBest(a, b) : sc.d, q = depoQ(a, b, bk);
     const fall = Math.max(0, Math.min(1, (sc.r + .6 - Math.hypot(a - sc.i, b - sc.j)) / 1.6));
-    d[o] = q < .5 ? 232 : 232 - (q - .5) * 2 * 140; d[o + 1] = q < .5 ? 87 + q * 2 * 110 : 197 + (q - .5) * 2 * 40; d[o + 2] = 74 + (q > .75 ? 40 : 0);
-    d[o + 3] = (25 + q * q * 190) * fall * pulse; }
+    if (all) { const c = DEPO_RGB[bk]; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = (q < .45 ? 10 : 30 + (q - .45) * 330) * fall * pulse; }
+    else { d[o] = q < .5 ? 232 : 232 - (q - .5) * 2 * 140; d[o + 1] = q < .5 ? 87 + q * 2 * 110 : 197 + (q - .5) * 2 * 40; d[o + 2] = 74 + (q > .75 ? 40 : 0);
+      d[o + 3] = (25 + q * q * 190) * fall * pulse; } }
   heatX.putImageData(img, 0, 0);
   const [sx, sy] = toScr(OX + (sc.i - sc.r) * CELL, OY + (sc.j + sc.r + 1) * CELL);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; ctx.drawImage(heatC, sx, sy, n * cs, n * cs);
@@ -1306,10 +1313,13 @@ function drawHeat(sc, cs, now) {
   ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.strokeStyle = "rgba(79,179,232,.55)"; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, rr * ph, 0, 7); ctx.strokeStyle = `rgba(79,179,232,${.5 * (1 - ph)})`; ctx.lineWidth = 2; ctx.stroke();
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  if (cs > 30) for (let dj = -sc.r; dj <= sc.r; dj++) for (let di = -sc.r; di <= sc.r; di++) { const a = sc.i + di, b = sc.j + dj;
-    if (!inGrid(a, b) || !inCity[b * GW + a] || Math.hypot(di, dj) > sc.r + .3) continue; const q = depoQ(a, b, sc.d), [x, y] = toScr(...cellCenter(a, b));
+  const allM = sc.d === "all";
+  if (cs > 13) for (let dj = -sc.r; dj <= sc.r; dj++) for (let di = -sc.r; di <= sc.r; di++) { const a = sc.i + di, b = sc.j + dj;
+    if (!inGrid(a, b) || !inCity[b * GW + a] || Math.hypot(di, dj) > sc.r + .3) continue; const bk = allM ? depoBest(a, b) : sc.d, q = depoQ(a, b, bk), [x, y] = toScr(...cellCenter(a, b));
+    if (allM && q >= .6) { ctx.globalAlpha = Math.min(1, .45 + q * .6); ctx.font = Math.max(10, Math.min(20, cs * .34)) + "px system-ui"; ctx.fillStyle = "#fff"; ctx.fillText(DEPO[bk].i, x, y + cs * .08); ctx.globalAlpha = 1; }
+    if (cs <= 30 || (allM && q < .45)) continue;
     ctx.font = "700 " + Math.min(15, cs * .2) + "px system-ui"; ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillText(pct(q), x + 1, y - cs * .32 + 1); ctx.fillStyle = q >= .7 ? "#b9ffc4" : q >= .4 ? "#ffe2a0" : "#ffb4ac"; ctx.fillText(pct(q), x, y - cs * .32); }
-  const b = scanBest(sc); if (b && cs > 8) { const [x, y] = toScr(...cellCenter(b.a, b.b)); badge(x, y - cs * .05, Math.max(9, Math.min(15, cs * .26)), DEPO[sc.d].i, "#62c774", 12); }
+  const b = scanBest(sc); if (b && cs > 8) { const [x, y] = toScr(...cellCenter(b.a, b.b)); badge(x, y - cs * .05, Math.max(9, Math.min(15, cs * .26)), DEPO[allM ? depoBest(b.a, b.b) : sc.d].i, "#62c774", 12); }
 }
 
 /* ----- ручной сбор ресурса с богатой клетки ----- */
@@ -1317,7 +1327,7 @@ const GATHER = {soil: ["veg", 1], water: ["water", 1], scrap: ["parts", 1], grid
 const GATHER_CD = 15 * 60e3, GATHER_MIN = .5;
 function gatherHere() {            // что можно собрать на клетке игрока: выбранный в сканере ресурс, иначе самый богатый
   const i = S.p.i, j = S.p.j; if (safeCell(i, j)) return null;
-  let d = S.scanOn && depoQ(i, j, S.scanD || "scrap") >= GATHER_MIN ? S.scanD || "scrap" : null;
+  let d = S.scanOn && S.scanD && S.scanD !== "all" && depoQ(i, j, S.scanD) >= GATHER_MIN ? S.scanD : null;
   if (!d) d = Object.keys(DEPO).reduce((a, k) => depoQ(i, j, k) > depoQ(i, j, a) ? k : a);
   const q = depoQ(i, j, d), [it, per] = GATHER[d]; return {d, q, it, n: (1 + Math.floor(q * 3)) * per};
 }
