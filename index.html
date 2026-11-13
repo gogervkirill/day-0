@@ -2312,7 +2312,7 @@ function eventTick(now) {
   if (E && now > E.until) { log(EV[E.t] + " — закончилось"); S.event = null; S.nextEvent = now + rnd(8, 14) * 60e3; dirty = true; }
   if (!S.event && now > S.nextEvent) startEvent(now);
   const e = S.event; if (!e) return;
-  if (e.t === "toxic" && cheb(e.i, e.j, S.p.i, S.p.j) <= e.r && !S.inv.mask && now > (e.hit || 0) && !fight) {
+  if (e.t === "toxic" && cheb(e.i, e.j, S.p.i, S.p.j) <= e.r && !S.inv.mask && now > (e.hit || 0) && !fight && !afk()) {
     e.hit = now + 5000; const d = hurt(3); if (S.p.hp > 0) toast("☣ Токсичный воздух −" + d + " HP");
   }
 }
@@ -2326,7 +2326,7 @@ function startEvent(now) {
   } else if (t === "quake") {
     S.event = {t, until: now + 60e3};
     const c = S.cells[key(S.p.i, S.p.j)] || {};
-    if (!(c.o && c.f)) { const d = hurt(rnd(5, 14)); log("⚡ Афтершок! Обломки −" + d + " HP", "b"); } else log("⚡ Афтершок! Баррикады выдержали", "a");
+    if (afk()) log("⚡ Афтершок! Вы пересидели его в укрытии", "a"); else if (!(c.o && c.f)) { const d = hurt(rnd(5, 14)); log("⚡ Афтершок! Обломки −" + d + " HP", "b"); } else log("⚡ Афтершок! Баррикады выдержали", "a");
     for (let dj = -6; dj <= 6; dj++) for (let di = -6; di <= 6; di++) { const cc = S.cells[key(S.p.i + di, S.p.j + dj)]; if (cc) cc.lc = 0; }
     log("Завалы вскрыли новые тайники — лут поблизости обновлён", "a"); quakeBuildings([S.p.i, S.p.j], now);
   } else if (t === "drones") {
@@ -2474,7 +2474,7 @@ function stepEnts() {
     const T = ENEMY[e.type];
     if (fight && fight.e === e) continue;
     if (e.type === "turret" || e.type === "boss" || e.stolen) { // стационарные: турель стреляет по соседним клеткам
-      if (e.type === "turret" && !fight && !travel && cheb(e.i, e.j, S.p.i, S.p.j) === 1 && now > (e.shot || 0)) {
+      if (e.type === "turret" && !fight && !travel && !afk() && cheb(e.i, e.j, S.p.i, S.p.j) === 1 && now > (e.shot || 0)) {
         e.shot = now + 4000; if (Math.random() < .5) { const d = hurt(rnd(5, 9)); log("Турель стреляет! −" + d + " HP", "b"); renderAll(); }
       }
       continue;
@@ -2483,14 +2483,14 @@ function stepEnts() {
     e.next = now + T.step * (.7 + Math.random() * .6);
     const dist = cheb(e.i, e.j, S.p.i, S.p.j);
     let ti = e.i, tj = e.j;
-    const hunt = !travel && !safeCell(S.p.i, S.p.j) && (dist <= 1 || e.aggro);
+    const hunt = !travel && !afk() && !safeCell(S.p.i, S.p.j) && (dist <= 1 || e.aggro);
     if (hunt && !e.seen) {   // сначала замечает: пауза 4 с, игрок видит угрозу и может уйти
       e.seen = now; e.next = now + 4000; e.aggro = true; moved = true; route = null; buzz(80);
       toast("⚠ " + (e.name || T.n) + " заметил вас: уходите или готовьтесь к бою"); continue;
     }
     if (hunt) { ti += Math.sign(S.p.i - e.i); tj += Math.sign(S.p.j - e.j); e.aggro = dist <= 3; if (!e.aggro) e.seen = 0; }
     else if (Math.random() < .6) { ti += rnd(-1, 1); tj += rnd(-1, 1); if (!e.roam && cheb(ti, tj, e.hi, e.hj) > 4) { ti = e.i; tj = e.j; } }
-    if (!inGrid(ti, tj) || !inCity[tj * GW + ti]) continue;
+    if (!inGrid(ti, tj) || !inCity[tj * GW + ti] || (ti === S.p.i && tj === S.p.j && afk())) continue;
     const tc = S.cells[key(ti, tj)];
     if ((tc && tc.f || safeCell(ti, tj)) && !(ti === S.p.i && tj === S.p.j)) continue;
     if (safeCell(ti, tj)) continue;  // баррикады не пускают
@@ -2604,13 +2604,19 @@ function raids() {
 
 /* ----- выживание: тик раз в секунду ----- */
 const RATE = {food: 1 / 45, water: 1 / 30, en: 1 / 6, hp: 1 / 20};
+/* Безопасный простой: если игрок 90 с ничего не нажимал и ничего не выполняется, личные угрозы на паузе
+   (голод не убивает, выброс, турели и афтершок не ранят, враги не нападают). Набеги на территорию идут как обычно. */
+let lastAct = Date.now(), afkWas = false; const AFK_MS = 90e3;
+const afk = () => Date.now() - lastAct > AFK_MS && !route && !travel && !busy && !fight;
+["pointerdown", "keydown", "touchstart", "wheel"].forEach(ev => window.addEventListener(ev, () => { lastAct = Date.now(); }, {passive: true, capture: true}));
 function survive(dtSec, offline) {
+  const fl = !offline && afk() ? 20 : 0, down = (v, d) => v <= fl ? v : Math.max(fl, v - d);
   const p = S.p; const own = (S.cells[key(p.i, p.j)] || {}).o;
   const meta = 1 - .15 * pk("meta");
-  p.food = Math.max(0, p.food - RATE.food * dtSec * meta);
-  p.water = Math.max(0, p.water - RATE.water * dtSec * meta);
+  p.food = down(p.food, RATE.food * dtSec * meta);
+  p.water = down(p.water, RATE.water * dtSec * meta);
   p.en = Math.min(100, p.en + RATE.en * dtSec * (resting && own ? 3 : 1) * (1 + .25 * pk("stam")));
-  if (p.food <= 0 || p.water <= 0) { p.hp -= dtSec / 10; if (offline) p.hp = Math.max(10, p.hp); else if (p.hp <= 0) { p.hp = 0; die(); } }
+  if (p.food <= 0 || p.water <= 0) { p.hp -= dtSec / 10; if (offline || afk()) p.hp = Math.max(10, p.hp); else if (p.hp <= 0) { p.hp = 0; die(); } }
   else if (p.food > 40 && p.water > 40) { const hc = S.cells[key(p.i, p.j)]; const med = bWorking(hc) && hc.b.t === "med" ? 2 : 1;
     p.hp = Math.min(100, p.hp + RATE.hp * dtSec * (resting && own ? 6 * med : 1)); }
 }
@@ -2634,7 +2640,7 @@ function setGps(on) {
         if (i === S.p.i && j === S.p.j) return;
         const edge = Math.min(fx - i, i + 1 - fx, fy - j, j + 1 - fy);   // гистерезис: у самой границы соседней клетки не переключаемся
         if (cheb(i, j, S.p.i, S.p.j) === 1 && edge < GPS_EDGE) return;
-        if (fight) return; busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); centerOnPlayer();
+        if (fight) return; lastAct = Date.now(); busy = null; hideProgress(); S.p.i = i; S.p.j = j; enterCell(i, j); centerOnPlayer();
       }, err => { if (err.code === 1) { toast("GPS: доступ запрещён"); setGps(false); } else toast("GPS: ищу сигнал…"); },
       {enableHighAccuracy: true, maximumAge: 3000, timeout: 20000});
       S.gps = true; log("Режим GPS включён", "a");
@@ -2665,7 +2671,8 @@ function renderHud() {
   const z = zoneFaction(p.i, p.j);
   document.getElementById("cellInfo").innerHTML = `<span class="t">${cellBase(p.i, p.j).n}</span>${streetOf(p.i, p.j) ? `<span class="muted"> · ${streetOf(p.i, p.j)}</span>` : ""}` + (safeCell(p.i, p.j) ? ` · <span style="color:var(--good)">безопасно</span>` : "") +
     (c.o ? ` · <span style="color:var(--good)">ваша${c.f ? " 🛡" : ""}</span>` : z ? ` · <span style="color:${z === "ai" ? "var(--ai)" : "var(--gang)"}">${z === "ai" ? "зона ИИ" : "зона банды"}</span>` : "") +
-    (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡" : "");
+    (S.vehicle === "bike" ? " · 🚲" : S.vehicle === "car" ? " · 🚗 " + S.tank + "/10" : "") + (S.gps ? " · 📡" : "") + (afk() ? ` · <span style="color:var(--ai)">💤 пауза угроз</span>` : "");
+  { const a = afk(); if (a !== afkWas) { afkWas = a; if (a) toast("💤 Вы отошли: личные угрозы на паузе"); } }
   document.getElementById("wallet").innerHTML = `⭐ <b>${S.lvl}</b> <span class="muted">${Math.floor(S.xp / xpNext() * 100)}%</span> · 💰 <b>${S.money}</b>`;
   renderScanBar(); document.getElementById("bLayer").classList.toggle("on", !!S.showDist);
   const eb = document.getElementById("eventBar"); const E = S.event;
